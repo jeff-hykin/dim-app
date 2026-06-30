@@ -31,8 +31,9 @@
 // see ui.js.
 
 import { DimUi } from "./ui.js"
+import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.2.0"
+export const VERSION = "0.3.0"
 
 const DIM = Symbol.for("dim.app")
 
@@ -93,6 +94,11 @@ export class DimAppBackend {
         this._closed = false
         this._queue = []
         this._backoff = RECONNECT_MIN_MS
+
+        // dim binary version, learned from the host's connect frame; compat
+        // verdict (null = unknown yet, true/false once the host has announced).
+        this.dimHostVersion = null
+        this.dimCompatible = null
 
         // Desktop platform API (popups + privileged commands), reachable as
         // dimApp.ui.* and dimApp.sudo.run(). Connects lazily on first use.
@@ -157,6 +163,17 @@ export class DimAppBackend {
         try {
             msg = JSON.parse(raw)
         } catch {
+            return
+        }
+        if (msg && msg.__dimHost) {
+            // the host (dim binary) announced its version — verify we support it
+            this.dimHostVersion = msg.__dimHost.v ?? null
+            this.dimCompatible = checkDimCompat({
+                app: this.app,
+                hostVersion: this.dimHostVersion,
+                ui: this.ui,
+                sdkVersion: VERSION,
+            }).ok
             return
         }
         // version handshake from a frontend — verify the two SDK halves match.

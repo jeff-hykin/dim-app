@@ -14,7 +14,7 @@ shared coordination state lives on one `globalThis[Symbol.for("dim.app")]` slot:
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.2.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/frontend.js"
 
 const app = new DimAppFrontend()              // name auto-detected from the URL
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -24,7 +24,7 @@ app.send("setGoal", 350)                       // → our backend
 ## Backend (Deno, in the dashboard process)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.2.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/backend.js"
 
 const app = new DimAppBackend()  // name comes from the registry the dashboard set
 const ctx = dimContext()         // { Dimos, bridge, ... } provided by the dashboard
@@ -34,6 +34,26 @@ app.send("hello", { n: 1 })                 // → all of this app's frontends
 
 Both halves carry a `VERSION`; the frontend sends it on connect so the backend
 can warn when the two are out of sync.
+
+## dim binary compatibility
+
+The pinned SDK version in your import URL (`@v0.3.0`) is the *only* thing an app
+maintainer declares — and it carries the binary requirement with it. The SDK
+itself knows which `dim` binary versions it works with (`SUPPORTED_DIM` in
+`compat.js`), so apps never hardcode a binary range.
+
+On connect the desktop announces its binary version; the SDK checks it against
+`SUPPORTED_DIM`. If the binary is too old (or out of range), it logs a clear
+error and toasts the user instead of failing in some confusing downstream way.
+The verdict is on the instance:
+
+```js
+app.dimHostVersion   // e.g. "0.3.62" (null in a dev run with no dim binary)
+app.dimCompatible    // true / false / null (null = host hasn't announced yet)
+```
+
+A null/unknown host version is treated as compatible — dev runs without a `dim`
+binary set no version, so there's nothing to enforce.
 
 ## Desktop UI + privileged commands
 
