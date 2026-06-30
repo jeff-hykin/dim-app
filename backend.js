@@ -25,8 +25,14 @@
 //
 // Dashboard loader sets `current`/`ctx` (via the underscored helpers below) right
 // before `import()`-ing each app's backend module.
+//
+// Like the frontend, the instance carries the desktop platform API:
+// `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` —
+// see ui.js.
 
-export const VERSION = "0.1.0"
+import { DimUi } from "./ui.js"
+
+export const VERSION = "0.2.0"
 
 const DIM = Symbol.for("dim.app")
 
@@ -87,6 +93,12 @@ export class DimAppBackend {
         this._closed = false
         this._queue = []
         this._backoff = RECONNECT_MIN_MS
+
+        // Desktop platform API (popups + privileged commands), reachable as
+        // dimApp.ui.* and dimApp.sudo.run(). Connects lazily on first use.
+        this._ui = new DimUi(() => this.app)
+        this.ui = this._ui.ui
+        this.sudo = this._ui.sudo
 
         reg.registered.set(app, this) // register ourself (+ our callbacks) in the shared registry
         this._connect()
@@ -206,6 +218,7 @@ export class DimAppBackend {
         try {
             this._ws?.close()
         } catch { /* ignore */ }
+        this._ui.close()
         this._ws = null
         this._open = false
     }

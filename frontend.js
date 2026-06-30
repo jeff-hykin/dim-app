@@ -12,8 +12,13 @@
 //
 // On connect it sends a one-time version handshake so the backend can warn if the
 // two SDK halves are out of sync.
+//
+// The instance also carries the desktop platform API: `dimApp.ui.*` (toast,
+// confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` — see ui.js.
 
-export const VERSION = "0.1.0"
+import { DimUi } from "./ui.js"
+
+export const VERSION = "0.2.0"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
@@ -65,6 +70,12 @@ export class DimAppFrontend {
         this._closed = false
         this._queue = []
         this._backoff = RECONNECT_MIN_MS
+
+        // Desktop platform API (popups + privileged commands), reachable as
+        // dimApp.ui.* and dimApp.sudo.run(). Connects lazily on first use.
+        this._ui = new DimUi(() => this.app)
+        this.ui = this._ui.ui
+        this.sudo = this._ui.sudo
 
         this._connect()
     }
@@ -178,6 +189,7 @@ export class DimAppFrontend {
         try {
             this._ws?.close()
         } catch { /* ignore */ }
+        this._ui.close()
         this._ws = null
         this._open = false
     }
