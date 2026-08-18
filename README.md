@@ -27,7 +27,7 @@ app.send("setGoal", 350)                       // → our backend
 import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/backend.js"
 
 const app = new DimAppBackend()  // name comes from the registry the dashboard set
-const ctx = dimContext()         // { Dimos, bridge, ... } provided by the dashboard
+const ctx = dimContext()         // { dimosDir, python, ... } provided by the dashboard
 app.onReceive((kind, payload) => { ... })  // ← a frontend → us
 app.send("hello", { n: 1 })                 // → all of this app's frontends
 ```

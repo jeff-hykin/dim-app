@@ -14,7 +14,7 @@
 //       version,                 // this SDK's version
 //       current,                 // app whose backend is being imported right now
 //       registered: Map,         // app name -> live DimAppBackend (with its callbacks)
-//       ctx,                     // dashboard-provided context (Dimos client, bridge)
+//       ctx,                     // dashboard-provided context (dimos dir, python)
 //     }
 //
 // App author writes:
@@ -46,7 +46,7 @@ export function registry() {
     return reg
 }
 
-/** Dashboard-provided context (the Dimos client + bridge endpoint), or null. */
+/** Dashboard-provided context (the dimos dir + venv python), or null. */
 export function dimContext() {
     return registry().ctx
 }
