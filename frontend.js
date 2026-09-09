@@ -16,10 +16,11 @@
 // The instance also carries the desktop platform API: `dimApp.ui.*` (toast,
 // confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` — see ui.js.
 
+import { packBinary, unpackBinary } from "./binary.js"
 import { DimUi } from "./ui.js"
 import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.3.0"
+export const VERSION = "0.3.1"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
@@ -98,6 +99,7 @@ export class DimAppFrontend {
             return
         }
         this._ws = ws
+        ws.binaryType = "arraybuffer" // binary frames arrive as ArrayBuffer, not Blob
 
         ws.onopen = () => {
             this._open = true
@@ -139,6 +141,13 @@ export class DimAppFrontend {
     }
 
     _dispatch(raw) {
+        if (raw instanceof ArrayBuffer) {
+            const unpacked = unpackBinary(raw)
+            if (unpacked) {
+                this._deliver(unpacked)
+            }
+            return
+        }
         let msg
         try {
             msg = JSON.parse(raw)
@@ -163,6 +172,10 @@ export class DimAppFrontend {
         if (!Array.isArray(args)) {
             args = [args]
         }
+        this._deliver(args)
+    }
+
+    _deliver(args) {
         for (const fn of this._handlers) {
             try {
                 fn(...args)
@@ -176,6 +189,23 @@ export class DimAppFrontend {
     receiveRequest(fn) {
         this._handlers.push(fn)
         return this
+    }
+
+    /**
+     * Send byte payloads (jpegs, point clouds, …) without base64: the bytes ride a
+     * binary websocket frame untouched, `meta` rides a small JSON header. Handlers
+     * on the other side receive (kind, { ...meta, bytes: Uint8Array }).
+     */
+    sendBytes(kind, bytes, meta = {}) {
+        if (this._closed) {
+            throw new Error(`DimAppFrontend(${this.app}): sendBytes() after close()`)
+        }
+        const frame = packBinary(kind, bytes, meta)
+        if (this._open && this._ws) {
+            this._ws.send(frame)
+        } else {
+            this._queue.push(frame)
+        }
     }
 
     /** Send a message to THIS app's backend. Auto-queues while (re)connecting. */

@@ -30,10 +30,11 @@
 // `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` —
 // see ui.js.
 
+import { packBinary, unpackBinary } from "./binary.js"
 import { DimUi } from "./ui.js"
 import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.3.0"
+export const VERSION = "0.3.1"
 
 const DIM = Symbol.for("dim.app")
 
@@ -122,6 +123,7 @@ export class DimAppBackend {
             return
         }
         this._ws = ws
+        ws.binaryType = "arraybuffer" // binary frames arrive as ArrayBuffer, not Blob
 
         ws.onopen = () => {
             this._open = true
@@ -159,6 +161,13 @@ export class DimAppBackend {
     }
 
     _dispatch(raw) {
+        if (raw instanceof ArrayBuffer) {
+            const unpacked = unpackBinary(raw)
+            if (unpacked) {
+                this._deliver(unpacked)
+            }
+            return
+        }
         let msg
         try {
             msg = JSON.parse(raw)
@@ -188,6 +197,10 @@ export class DimAppBackend {
         if (!Array.isArray(args)) {
             args = [args]
         }
+        this._deliver(args)
+    }
+
+    _deliver(args) {
         if (typeof this.onRequest === "function") {
             try {
                 this.onRequest(...args)
@@ -221,6 +234,23 @@ export class DimAppBackend {
         } catch (err) {
             throw new Error(`DimAppBackend(${this.app}): payload is not JSON-serializable: ${err.message}`)
         }
+        if (this._open && this._ws) {
+            this._ws.send(frame)
+        } else {
+            this._queue.push(frame)
+        }
+    }
+
+    /**
+     * Send byte payloads (jpegs, point clouds, …) without base64: the bytes ride a
+     * binary websocket frame untouched, `meta` rides a small JSON header. Handlers
+     * on the other side receive (kind, { ...meta, bytes: Uint8Array }).
+     */
+    sendBytes(kind, bytes, meta = {}) {
+        if (this._closed) {
+            throw new Error(`DimAppBackend(${this.app}): sendBytes() after close()`)
+        }
+        const frame = packBinary(kind, bytes, meta)
         if (this._open && this._ws) {
             this._ws.send(frame)
         } else {
