@@ -14,7 +14,7 @@ shared coordination state lives on one `globalThis[Symbol.for("dim.app")]` slot:
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.2/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.4.0/frontend.js"
 
 const app = new DimAppFrontend()              // name auto-detected from the URL
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -24,7 +24,7 @@ app.send("setGoal", 350)                       // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.2/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.4.0/backend.js"
 
 const app = new DimAppBackend()  // name comes from the registry the dashboard set
 const ctx = dimContext()         // { dimosDir, python, zenohWebUrl, desktopUrl } provided by the desktop
@@ -44,22 +44,41 @@ can warn when the two are out of sync.
 
 ## Running under the new dimOS Desktop
 
-The new (Rust) [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) (branch `jeff/rust_desktop`) runs each backend in its own Deno
-process instead of in-process. List the module as `backend: { dim_app: path/to/main.js }` in your repo's `dimos.yaml`
-and nothing else changes: `new DimAppBackend()` and `dimContext()` work as before. With no registry entry, the SDK
-reads the environment the Desktop sets:
+The new (Rust) [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) (branch `jeff/rust_desktop`) builds
+every app with `nix build .#dimosApp`. The output is either a directory with an `index.html` (served as is) or a
+`bin/dimos-app-server` that Desktop starts with `--socket <path>` and proxies `/apps/<name>/` to. This repo's flake
+makes either from an SDK app:
 
-- `DIM_APP_NAME` — the app's name (`custom/<pkg>/<app>`)
+```nix
+{
+    inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.4.0";
+    outputs = { self, nixpkgs, dim-app }: {
+        packages = dim-app.lib.forAllSystems nixpkgs (pkgs: {
+            dimosApp = dim-app.lib.mkDimosApp {
+                inherit pkgs;
+                src = self;
+                frontend = "dim/apps/my_app/frontend";
+                backend = "dim/apps/my_app/main.js"; # optional
+            };
+        });
+    };
+}
+```
+
+With a backend, `dimos-app-server` is [serve.js](serve.js): it serves the frontend on the socket and runs the backend
+module in the same Deno process, so `new DimAppBackend()` and `dimContext()` work as before. With no registry entry
+the SDK reads the environment Desktop sets:
+
+- `DIM_APP_NAME` — the app's name, which is also the bus namespace its frontend reads off `/apps/<name>/`
 - `DIM_APP_CTX` — `dimContext()` as JSON
 - `DIM_DESKTOP_HOST` / `DIM_DESKTOP_PORT` — where `/ws` and `/ui` live (falls back to `DIM_DASHBOARD_HOST` / `DIM_DASHBOARD_PORT`, then `127.0.0.1:1024`)
 
 So a backend can also be started by hand for debugging:
 
 ```sh
-DIM_APP_NAME=custom/my-pkg/my_app DIM_DESKTOP_PORT=7078 DIM_APP_CTX='{"dimosDir":"..."}' deno run -A main.js
+DIM_APP_NAME=my-app DIM_DESKTOP_PORT=7078 deno run -A serve.js --frontend dim/apps/my_app/frontend --backend dim/apps/my_app/main.js --socket /tmp/my-app.sock
 ```
-
-The SDK accepts the host protocol version the new Desktop announces (`0.3.1`).
 
 ## dim binary compatibility
 

@@ -20,7 +20,7 @@ import { packBinary, unpackBinary } from "./binary.js"
 import { DimUi } from "./ui.js"
 import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.3.2"
+export const VERSION = "0.4.0"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000

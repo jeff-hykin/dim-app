@@ -34,7 +34,7 @@ import { packBinary, unpackBinary } from "./binary.js"
 import { DimUi, readEnv, desktopHostPort } from "./ui.js"
 import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.3.2"
+export const VERSION = "0.4.0"
 
 const DIM = Symbol.for("dim.app")
 
