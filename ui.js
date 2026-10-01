@@ -26,11 +26,26 @@ function uiUrl(app) {
         return `${proto}//${location.host}/ui?${q}`
     }
     // Deno: loopback to the desktop process.
-    const env = globalThis.Deno?.env
-    let host = (env && (env.get("DIM_DESKTOP_HOST") || env.get("DIM_DASHBOARD_HOST"))) || "127.0.0.1"
-    if (host === "0.0.0.0") host = "127.0.0.1"
-    const port = (env && (env.get("DIM_DESKTOP_PORT") || env.get("DIM_DASHBOARD_PORT"))) || "1024"
-    return `ws://${host}:${port}/ui?${q}`
+    return `ws://${desktopHostPort()}/ui?${q}`
+}
+
+/** Read an env var in Deno; undefined in a browser or without env permission. */
+export function readEnv(name) {
+    try {
+        return globalThis.Deno?.env.get(name)
+    } catch {
+        return undefined
+    }
+}
+
+/** "host:port" of the desktop for a Deno backend: DIM_DESKTOP_* first, then the older DIM_DASHBOARD_* names. */
+export function desktopHostPort() {
+    let host = readEnv("DIM_DESKTOP_HOST") || readEnv("DIM_DASHBOARD_HOST") || "127.0.0.1"
+    if (host === "0.0.0.0") {
+        host = "127.0.0.1"
+    }
+    const port = readEnv("DIM_DESKTOP_PORT") || readEnv("DIM_DASHBOARD_PORT") || "1024"
+    return `${host}:${port}`
 }
 
 /**

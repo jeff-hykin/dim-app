@@ -14,7 +14,7 @@
 //       version,                 // this SDK's version
 //       current,                 // app whose backend is being imported right now
 //       registered: Map,         // app name -> live DimAppBackend (with its callbacks)
-//       ctx,                     // dashboard-provided context (dimos dir, python)
+//       ctx,                     // desktop-provided context (see dimContext())
 //     }
 //
 // App author writes:
@@ -31,10 +31,10 @@
 // see ui.js.
 
 import { packBinary, unpackBinary } from "./binary.js"
-import { DimUi } from "./ui.js"
+import { DimUi, readEnv, desktopHostPort } from "./ui.js"
 import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.3.1"
+export const VERSION = "0.3.2"
 
 const DIM = Symbol.for("dim.app")
 
@@ -47,9 +47,23 @@ export function registry() {
     return reg
 }
 
-/** Dashboard-provided context (the dimos dir + venv python), or null. */
+/**
+ * Desktop-provided context, or null: `{ dimosDir, python, zenohWebUrl, desktopUrl }`.
+ * Falls back to the DIM_APP_CTX env var (JSON) when the backend runs in its own process.
+ */
 export function dimContext() {
-    return registry().ctx
+    const reg = registry()
+    if (reg.ctx == null) {
+        const raw = readEnv("DIM_APP_CTX")
+        if (raw) {
+            try {
+                reg.ctx = JSON.parse(raw)
+            } catch {
+                console.warn("dim-app: DIM_APP_CTX is not valid JSON, ignoring it")
+            }
+        }
+    }
+    return reg.ctx
 }
 
 /** (dashboard only) Name the app whose backend is about to be imported. */
@@ -66,10 +80,8 @@ const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
 
 function defaultWsUrl(app) {
-    // Backends run inside the dashboard process, so loopback is correct.
-    const host = (typeof Deno !== "undefined" && Deno.env.get("DIM_DASHBOARD_HOST")) || "127.0.0.1"
-    const port = (typeof Deno !== "undefined" && Deno.env.get("DIM_DASHBOARD_PORT")) || "1024"
-    return `ws://${host}:${port}/ws?app=${encodeURIComponent(app)}&role=backend&v=${VERSION}`
+    // Backends run on the desktop's machine (in its process or a child of it), so loopback is correct.
+    return `ws://${desktopHostPort()}/ws?app=${encodeURIComponent(app)}&role=backend&v=${VERSION}`
 }
 
 export class DimAppBackend {
@@ -78,11 +90,12 @@ export class DimAppBackend {
      */
     constructor(opts = {}) {
         const reg = registry()
-        const app = opts.app || reg.current
+        // a standalone process (the new Desktop) names the app via DIM_APP_NAME
+        const app = opts.app || reg.current || readEnv("DIM_APP_NAME")
         if (!app) {
             throw new Error(
                 "DimAppBackend: could not determine the app name. Construct it under the " +
-                "dashboard app-loader (which sets the current app), or pass `new DimAppBackend({ app })`.",
+                "dashboard app-loader (which sets the current app), set DIM_APP_NAME, or pass `new DimAppBackend({ app })`.",
             )
         }
         this.app = app

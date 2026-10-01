@@ -14,30 +14,56 @@ shared coordination state lives on one `globalThis[Symbol.for("dim.app")]` slot:
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.2/frontend.js"
 
 const app = new DimAppFrontend()              // name auto-detected from the URL
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
 app.send("setGoal", 350)                       // → our backend
 ```
 
-## Backend (Deno, in the dashboard process)
+## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.3.2/backend.js"
 
 const app = new DimAppBackend()  // name comes from the registry the dashboard set
-const ctx = dimContext()         // { dimosDir, python, ... } provided by the dashboard
+const ctx = dimContext()         // { dimosDir, python, zenohWebUrl, desktopUrl } provided by the desktop
 app.onReceive((kind, payload) => { ... })  // ← a frontend → us
 app.send("hello", { n: 1 })                 // → all of this app's frontends
 ```
 
+`dimContext()` fields:
+
+- `dimosDir` — the dimos checkout the desktop uses
+- `python` — that checkout's venv python
+- `zenohWebUrl` — the desktop's [zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge, for subscribing to / publishing on dimos streams
+- `desktopUrl` — the desktop's HTTP base URL
+
 Both halves carry a `VERSION`; the frontend sends it on connect so the backend
 can warn when the two are out of sync.
 
+## Running under the new dimOS Desktop
+
+The new (Rust) [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) (branch `jeff/rust_desktop`) runs each backend in its own Deno
+process instead of in-process. List the module as `backend: { dim_app: path/to/main.js }` in your repo's `dimos.yaml`
+and nothing else changes: `new DimAppBackend()` and `dimContext()` work as before. With no registry entry, the SDK
+reads the environment the Desktop sets:
+
+- `DIM_APP_NAME` — the app's name (`custom/<pkg>/<app>`)
+- `DIM_APP_CTX` — `dimContext()` as JSON
+- `DIM_DESKTOP_HOST` / `DIM_DESKTOP_PORT` — where `/ws` and `/ui` live (falls back to `DIM_DASHBOARD_HOST` / `DIM_DASHBOARD_PORT`, then `127.0.0.1:1024`)
+
+So a backend can also be started by hand for debugging:
+
+```sh
+DIM_APP_NAME=custom/my-pkg/my_app DIM_DESKTOP_PORT=7078 DIM_APP_CTX='{"dimosDir":"..."}' deno run -A main.js
+```
+
+The SDK accepts the host protocol version the new Desktop announces (`0.3.1`).
+
 ## dim binary compatibility
 
-The pinned SDK version in your import URL (`@v0.3.0`) is the *only* thing an app
+The pinned SDK version in your import URL (`@v0.3.2`) is the *only* thing an app
 maintainer declares — and it carries the binary requirement with it. The SDK
 itself knows which `dim` binary versions it works with (`SUPPORTED_DIM` in
 `compat.js`), so apps never hardcode a binary range.
