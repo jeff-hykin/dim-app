@@ -1,178 +1,109 @@
-// dim-app — backend half of the shared dashboard app SDK.
+// dim-app — backend half of the app SDK (Deno).
 //
-// THE POINT: you can build a dashboard app on its own — a single file, imported
-// straight from a URL (esm.sh), with no build step and a tiny dependency. When
-// that app runs inside the DimOS dashboard it does NOT open its own port; every
-// app shares the dashboard's single websocket and is kept apart by *namespace*.
-//
-// Because the dashboard AND the app both import THIS exact module URL, Deno
-// dedupes it to a single module instance — one class, one shared registry — so
-// there is never a "two copies of DimAppBackend" problem. The coordination
-// state lives on one globalThis slot:
-//
-//     globalThis[Symbol.for("dim.app")] = {
-//       version,                 // this SDK's version
-//       current,                 // app whose backend is being imported right now
-//       registered: Map,         // app name -> live DimAppBackend (with its callbacks)
-//       ctx,                     // desktop-provided context (see dimContext())
-//     }
+// The backend module runs inside the app's own server (dim-app's serve.js, which `mkDimosApp` builds into the app's
+// `dimos-app-server`). serve.js bridges it to the app's frontends over a websocket at `dim-app/ws`; no other host is
+// involved.
 //
 // App author writes:
 //     import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@<ver>/backend.js"
-//     const dimApp = new DimAppBackend()        // name comes from the registry
+//     const dimApp = new DimAppBackend()        // name comes from the registry serve.js seeded
 //     dimApp.onReceive((...args) => { ... })     // ← a frontend called us
 //     dimApp.send("hello", { n: 1 })             // → all of this app's frontends
 //
-// Dashboard loader sets `current`/`ctx` (via the underscored helpers below) right
-// before `import()`-ing each app's backend module.
+// The app imports this module by URL and serve.js by path, so they're two module instances; they meet on one
+// globalThis slot:
 //
-// Like the frontend, the instance carries the desktop platform API:
-// `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` —
-// see ui.js.
+//     globalThis[Symbol.for("dim.app")] = {
+//       version,                 // this SDK's version
+//       current,                 // the app's name
+//       registered: Map,         // app name -> live DimAppBackend
+//       ctx,                     // see dimContext()
+//       host,                    // serve.js: { send(frame), ui(method, args), sudoRun(payload) }
+//     }
+//
+// `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` are shown by the app's open frontends.
 
 import { packBinary, unpackBinary } from "./binary.js"
-import { DimUi, readEnv, desktopHostPort } from "./ui.js"
-import { checkDimCompat } from "./compat.js"
 
-export const VERSION = "0.4.0"
+export const VERSION = "0.5.0"
 
 const DIM = Symbol.for("dim.app")
+
+function readEnv(name) {
+    try {
+        return globalThis.Deno?.env.get(name)
+    } catch {
+        return undefined
+    }
+}
 
 /** The single shared registry (created once, shared across every importer). */
 export function registry() {
     let reg = globalThis[DIM]
     if (!reg) {
-        reg = globalThis[DIM] = { version: VERSION, current: null, registered: new Map(), ctx: null }
+        reg = globalThis[DIM] = { version: VERSION, current: null, registered: new Map(), ctx: null, host: null }
     }
     return reg
 }
 
 /**
- * Desktop-provided context, or null: `{ dimosDir, python, zenohWebUrl, desktopUrl }`.
- * Falls back to the DIM_APP_CTX env var (JSON) when the backend runs in its own process.
+ * `{ dimosDir, python, zenohWebUrl, desktopUrl }`: what Desktop passes the app's server (serve.js reads its flags),
+ * else the environment Desktop sets (DIMOS_DIR, DIMOS_PYTHON, ZENOH_WEB_URL, DIMOS_DESKTOP_URL).
  */
 export function dimContext() {
     const reg = registry()
-    if (reg.ctx == null) {
-        const raw = readEnv("DIM_APP_CTX")
-        if (raw) {
-            try {
-                reg.ctx = JSON.parse(raw)
-            } catch {
-                console.warn("dim-app: DIM_APP_CTX is not valid JSON, ignoring it")
-            }
-        }
+    reg.ctx ??= {
+        dimosDir: readEnv("DIMOS_DIR") ?? null,
+        python: readEnv("DIMOS_PYTHON") ?? null,
+        zenohWebUrl: readEnv("ZENOH_WEB_URL") ?? null,
+        desktopUrl: readEnv("DIMOS_DESKTOP_URL") ?? null,
     }
     return reg.ctx
 }
 
-/** (dashboard only) Name the app whose backend is about to be imported. */
-export function _setCurrentApp(name) {
-    registry().current = name
-}
-
-/** (dashboard only) Provide the shared context apps read via dimContext(). */
-export function _setContext(ctx) {
-    registry().ctx = ctx
-}
-
-const RECONNECT_MIN_MS = 250
-const RECONNECT_MAX_MS = 5000
-
-function defaultWsUrl(app) {
-    // Backends run on the desktop's machine (in its process or a child of it), so loopback is correct.
-    return `ws://${desktopHostPort()}/ws?app=${encodeURIComponent(app)}&role=backend&v=${VERSION}`
+function host() {
+    const found = registry().host
+    if (!found) {
+        throw new Error("DimAppBackend: no host; run the backend under dim-app's serve.js (mkDimosApp does)")
+    }
+    return found
 }
 
 export class DimAppBackend {
     /**
-     * @param {{ app?: string, url?: string }} [opts]
+     * @param {{ app?: string }} [opts]
      */
     constructor(opts = {}) {
         const reg = registry()
-        // a standalone process (the new Desktop) names the app via DIM_APP_NAME
-        const app = opts.app || reg.current || readEnv("DIM_APP_NAME")
-        if (!app) {
-            throw new Error(
-                "DimAppBackend: could not determine the app name. Construct it under the " +
-                "dashboard app-loader (which sets the current app), set DIM_APP_NAME, or pass `new DimAppBackend({ app })`.",
-            )
-        }
-        this.app = app
-        this.url = opts.url || defaultWsUrl(app)
-
+        this.app = opts.app || reg.current || readEnv("DIMOS_APP_NAME") || "app"
         this._handlers = []
-        this.onRequest = null         // the loader may also assign module.receiveRequest
-        this._ws = null
-        this._open = false
+        this.onRequest = null // the loader may also assign module.receiveRequest
         this._closed = false
-        this._queue = []
-        this._backoff = RECONNECT_MIN_MS
 
-        // dim binary version, learned from the host's connect frame; compat
-        // verdict (null = unknown yet, true/false once the host has announced).
-        this.dimHostVersion = null
-        this.dimCompatible = null
+        this.ui = {
+            /** Transient toast on every open frontend. `kind` ∈ "info" | "ok" | "warn" | "error" (optional). */
+            toast: (message, kind) => host().ui("toast", { message: String(message ?? ""), kind }),
+            /** Yes/No dialog → boolean. */
+            confirm: (message, opts = {}) => host().ui("confirm", { message: String(message ?? ""), ...opts }),
+            /** Text prompt → string, or null if cancelled. Pass { default, placeholder, password }. */
+            ask: (message, opts = {}) => host().ui("ask", { message: String(message ?? ""), ...opts }),
+            /** Boolean prompt (yes/no wording) → boolean. */
+            askBoolean: (message, opts = {}) => host().ui("askBoolean", { message: String(message ?? ""), ...opts }),
+        }
+        this.sudo = {
+            /**
+             * Run a privileged command. A frontend shows a password prompt with the exact command; nothing runs
+             * until the user approves.
+             * @param {string[]} args  argv, e.g. ["route","-n","add","-host","231.1.1.1","-interface","en0"]
+             * @returns {Promise<{exitCode:number|null, out:string, stdout:string, stderr:string, cancelled:boolean}>}
+             */
+            run: (args, opts = {}) => host().sudoRun({ args, ...opts }),
+        }
 
-        // Desktop platform API (popups + privileged commands), reachable as
-        // dimApp.ui.* and dimApp.sudo.run(). Connects lazily on first use.
-        this._ui = new DimUi(() => this.app)
-        this.ui = this._ui.ui
-        this.sudo = this._ui.sudo
-
-        reg.registered.set(app, this) // register ourself (+ our callbacks) in the shared registry
-        this._connect()
+        reg.registered.set(this.app, this)
     }
 
-    _connect() {
-        if (this._closed) {
-            return
-        }
-        let ws
-        try {
-            ws = new WebSocket(this.url)
-        } catch {
-            this._scheduleReconnect()
-            return
-        }
-        this._ws = ws
-        ws.binaryType = "arraybuffer" // binary frames arrive as ArrayBuffer, not Blob
-
-        ws.onopen = () => {
-            this._open = true
-            this._backoff = RECONNECT_MIN_MS
-            const queued = this._queue
-            this._queue = []
-            for (const frame of queued) {
-                try {
-                    ws.send(frame)
-                } catch {
-                    this._queue.push(frame)
-                }
-            }
-        }
-        ws.onmessage = (event) => this._dispatch(event.data)
-        ws.onclose = () => {
-            this._open = false
-            this._ws = null
-            this._scheduleReconnect()
-        }
-        ws.onerror = () => {
-            try {
-                ws.close()
-            } catch { /* ignore */ }
-        }
-    }
-
-    _scheduleReconnect() {
-        if (this._closed) {
-            return
-        }
-        const delay = this._backoff
-        this._backoff = Math.min(this._backoff * 2, RECONNECT_MAX_MS)
-        setTimeout(() => this._connect(), delay)
-    }
-
+    /** (serve.js) A frame from one of this app's frontends. */
     _dispatch(raw) {
         if (raw instanceof ArrayBuffer) {
             const unpacked = unpackBinary(raw)
@@ -187,22 +118,13 @@ export class DimAppBackend {
         } catch {
             return
         }
-        if (msg && msg.__dimHost) {
-            // the host (dim binary) announced its version — verify we support it
-            this.dimHostVersion = msg.__dimHost.v ?? null
-            this.dimCompatible = checkDimCompat({
-                app: this.app,
-                hostVersion: this.dimHostVersion,
-                ui: this.ui,
-                sdkVersion: VERSION,
-            }).ok
-            return
-        }
         // version handshake from a frontend — verify the two SDK halves match.
         if (msg && msg.__dim) {
             if (msg.__dim.v && msg.__dim.v !== VERSION && !this._warnedVersion) {
                 this._warnedVersion = true
-                console.warn(`[dim:${this.app}] frontend SDK v${msg.__dim.v} != backend v${VERSION} — update one to match.`)
+                console.warn(
+                    `[dim:${this.app}] frontend SDK v${msg.__dim.v} != backend v${VERSION} — update one to match.`,
+                )
             }
             return
         }
@@ -236,7 +158,7 @@ export class DimAppBackend {
         return this
     }
 
-    /** Send a message to every connected frontend of THIS app. Auto-queues while (re)connecting. */
+    /** Send a message to every connected frontend of THIS app (none connected: dropped). */
     send(...data) {
         if (this._closed) {
             throw new Error(`DimAppBackend(${this.app}): send() after close()`)
@@ -247,11 +169,7 @@ export class DimAppBackend {
         } catch (err) {
             throw new Error(`DimAppBackend(${this.app}): payload is not JSON-serializable: ${err.message}`)
         }
-        if (this._open && this._ws) {
-            this._ws.send(frame)
-        } else {
-            this._queue.push(frame)
-        }
+        host().send(frame)
     }
 
     /**
@@ -263,23 +181,12 @@ export class DimAppBackend {
         if (this._closed) {
             throw new Error(`DimAppBackend(${this.app}): sendBytes() after close()`)
         }
-        const frame = packBinary(kind, bytes, meta)
-        if (this._open && this._ws) {
-            this._ws.send(frame)
-        } else {
-            this._queue.push(frame)
-        }
+        host().send(packBinary(kind, bytes, meta))
     }
 
-    /** Stop reconnecting, close the socket, and deregister. */
+    /** Stop receiving and deregister. */
     close() {
         this._closed = true
         registry().registered.delete(this.app)
-        try {
-            this._ws?.close()
-        } catch { /* ignore */ }
-        this._ui.close()
-        this._ws = null
-        this._open = false
     }
 }

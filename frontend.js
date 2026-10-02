@@ -1,61 +1,41 @@
-// dim-app — browser (frontend) half of the shared dashboard app SDK.
+// dim-app — browser (frontend) half of the app SDK.
 //
-// Mirror image of DimAppBackend. A dashboard app page does:
+// Mirror image of DimAppBackend. An app page does:
 //
 //     import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@<ver>/frontend.js"
 //     const dimApp = new DimAppFrontend()
 //     dimApp.receiveRequest((...args) => { ... })   // ← backend sent us data
 //     dimApp.send("setGoal", 350)                   // → this app's backend
 //
-// Every app connects to the dashboard's single `/ws`, tagged with the app's name
-// + role=frontend, so the broker keeps namespaces apart — apps share one port.
+// It connects to the app's own server (dim-app's serve.js) at `dim-app/ws`, relative to the page, so it works
+// wherever the app is mounted. On connect it sends a version handshake so the backend can warn if the two SDK halves
+// are out of sync.
 //
-// On connect it sends a one-time version handshake so the backend can warn if the
-// two SDK halves are out of sync.
-//
-// The instance also carries the desktop platform API: `dimApp.ui.*` (toast,
-// confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` — see ui.js.
+// The instance also carries `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)`. The popups
+// are rendered by this page (ui.js), for its own calls and for the backend's.
 
 import { packBinary, unpackBinary } from "./binary.js"
-import { DimUi } from "./ui.js"
-import { checkDimCompat } from "./compat.js"
+import { cancelUi, showUi } from "./ui.js"
 
-export const VERSION = "0.4.0"
+export const VERSION = "0.5.0"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
 
 function detectApp() {
-    if (typeof window !== "undefined" && window.DIM_APP) {
-        return String(window.DIM_APP)
+    const meta = document.querySelector('meta[name="dim-app"]')
+    if (meta?.content) {
+        return meta.content
     }
-    if (typeof document !== "undefined") {
-        const meta = document.querySelector('meta[name="dim-app"]')
-        if (meta?.content) {
-            return meta.content
-        }
-    }
-    const path = location.pathname
-    // installed apps:  /apps/installed/<pkg>/<app>/<file...>  ->  custom/<pkg>/<app>
-    let m = path.match(/^\/apps\/installed\/([^/]+)\/([^/]+)(?:\/|$)/)
-    if (m) {
-        return `custom/${decodeURIComponent(m[1])}/${decodeURIComponent(m[2])}`
-    }
-    // built-in / dev apps:  /apps/<name>[/...]
-    m = path.match(/^\/apps\/([^/]+)/)
-    if (m) {
-        return decodeURIComponent(m[1])
-    }
-    const parts = path.split("/").filter(Boolean)
-    if (parts.length >= 2) {
-        return decodeURIComponent(parts[parts.length - 2])
-    }
-    return parts[0] ? decodeURIComponent(parts[0]) : "app"
+    const match = location.pathname.match(/^\/apps\/([^/]+)/)
+    return match ? decodeURIComponent(match[1]) : "app"
 }
 
-function defaultWsUrl(app) {
-    const proto = location.protocol === "https:" ? "wss" : "ws"
-    return `${proto}://${location.host}/ws?app=${encodeURIComponent(app)}&role=frontend&v=${VERSION}`
+function defaultWsUrl() {
+    const url = new URL("dim-app/ws", location.href)
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+    url.search = `v=${VERSION}`
+    return url.href
 }
 
 export class DimAppFrontend {
@@ -64,7 +44,7 @@ export class DimAppFrontend {
      */
     constructor(opts = {}) {
         this.app = opts.app || detectApp()
-        this.url = opts.url || defaultWsUrl(this.app)
+        this.url = opts.url || defaultWsUrl()
 
         this._handlers = []
         this._ws = null
@@ -72,17 +52,38 @@ export class DimAppFrontend {
         this._closed = false
         this._queue = []
         this._backoff = RECONNECT_MIN_MS
+        this._seq = 0
+        this._sudoPending = new Map()
 
-        // dim binary version, learned from the host's connect frame; compat
-        // verdict (null = unknown yet, true/false once the host has announced).
-        this.dimHostVersion = null
-        this.dimCompatible = null
-
-        // Desktop platform API (popups + privileged commands), reachable as
-        // dimApp.ui.* and dimApp.sudo.run(). Connects lazily on first use.
-        this._ui = new DimUi(() => this.app)
-        this.ui = this._ui.ui
-        this.sudo = this._ui.sudo
+        this.ui = {
+            /** Transient toast. `kind` ∈ "info" | "ok" | "warn" | "error" (optional). */
+            toast: (message, kind) => showUi("toast", { message: String(message ?? ""), kind }),
+            /** Yes/No dialog → boolean. */
+            confirm: (message, opts = {}) => showUi("confirm", { message: String(message ?? ""), ...opts }),
+            /** Text prompt → string, or null if cancelled. Pass { default, placeholder, password }. */
+            ask: (message, opts = {}) => showUi("ask", { message: String(message ?? ""), ...opts }),
+            /** Boolean prompt (yes/no wording) → boolean. */
+            askBoolean: (message, opts = {}) => showUi("askBoolean", { message: String(message ?? ""), ...opts }),
+        }
+        this.sudo = {
+            /**
+             * Run a privileged command on the app's machine. A password prompt shows the exact command; nothing runs
+             * until the user approves.
+             * @param {string[]} args  argv, e.g. ["route","-n","add","-host","231.1.1.1","-interface","en0"]
+             * @returns {Promise<{exitCode:number|null, out:string, stdout:string, stderr:string, cancelled:boolean}>}
+             */
+            run: async (args, opts = {}) => {
+                const password = await showUi("password", { ...opts, command: args })
+                if (password == null) {
+                    return { exitCode: null, out: "", stdout: "", stderr: "cancelled by user", cancelled: true }
+                }
+                const id = `f${++this._seq}`
+                return await new Promise((resolve) => {
+                    this._sudoPending.set(id, resolve)
+                    this._sendFrame(JSON.stringify({ __dimSudo: { id, args, password } }))
+                })
+            },
+        }
 
         this._connect()
     }
@@ -154,19 +155,24 @@ export class DimAppFrontend {
         } catch {
             return
         }
-        if (msg && msg.__dimHost) {
-            // the host (dim binary) announced its version — verify we support it
-            this.dimHostVersion = msg.__dimHost.v ?? null
-            this.dimCompatible = checkDimCompat({
-                app: this.app,
-                hostVersion: this.dimHostVersion,
-                ui: this.ui,
-                sdkVersion: VERSION,
-            }).ok
+        if (msg?.__dimUi) {
+            // the backend's dimApp.ui.* / sudo password prompt: every open frontend shows it, the first answer wins
+            const { id, method, args, cancel } = msg.__dimUi
+            if (cancel) {
+                cancelUi(id)
+            } else {
+                showUi(method, args, id).then(
+                    (result) => id != null && this._sendFrame(JSON.stringify({ __dimUiReply: { id, result } })),
+                    (error) =>
+                        id != null && this._sendFrame(JSON.stringify({ __dimUiReply: { id, error: error.message } })),
+                )
+            }
             return
         }
-        if (msg && msg.__dim) {
-            return // backend-side handshake echo, ignore
+        if (msg?.__dimSudo) {
+            this._sudoPending.get(msg.__dimSudo.id)?.(msg.__dimSudo.result)
+            this._sudoPending.delete(msg.__dimSudo.id)
+            return
         }
         let args = msg && msg.data
         if (!Array.isArray(args)) {
@@ -185,6 +191,14 @@ export class DimAppFrontend {
         }
     }
 
+    _sendFrame(frame) {
+        if (this._open && this._ws) {
+            this._ws.send(frame)
+        } else {
+            this._queue.push(frame)
+        }
+    }
+
     /** Register a handler for backend → frontend messages. */
     receiveRequest(fn) {
         this._handlers.push(fn)
@@ -200,12 +214,7 @@ export class DimAppFrontend {
         if (this._closed) {
             throw new Error(`DimAppFrontend(${this.app}): sendBytes() after close()`)
         }
-        const frame = packBinary(kind, bytes, meta)
-        if (this._open && this._ws) {
-            this._ws.send(frame)
-        } else {
-            this._queue.push(frame)
-        }
+        this._sendFrame(packBinary(kind, bytes, meta))
     }
 
     /** Send a message to THIS app's backend. Auto-queues while (re)connecting. */
@@ -219,11 +228,7 @@ export class DimAppFrontend {
         } catch (err) {
             throw new Error(`DimAppFrontend(${this.app}): payload is not JSON-serializable: ${err.message}`)
         }
-        if (this._open && this._ws) {
-            this._ws.send(frame)
-        } else {
-            this._queue.push(frame)
-        }
+        this._sendFrame(frame)
     }
 
     /** True while the underlying socket is open. */
@@ -236,7 +241,6 @@ export class DimAppFrontend {
         try {
             this._ws?.close()
         } catch { /* ignore */ }
-        this._ui.close()
         this._ws = null
         this._open = false
     }

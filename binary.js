@@ -6,7 +6,7 @@
 //
 //     [u32 LE header length][header JSON {k: kind, m: meta}][payload bytes]
 //
-// The broker forwards frames verbatim either way. An older SDK receiving a
+// serve.js forwards frames verbatim either way. An older SDK receiving a
 // binary frame drops it in _dispatch (JSON.parse throws), so mixed versions
 // degrade to "no frame", never to a crash.
 

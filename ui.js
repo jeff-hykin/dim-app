@@ -1,143 +1,174 @@
-// dim-app — desktop UI + privileged-action client (browser AND Deno).
+// dim-app — the built-in popups (browser only): toasts, confirm/ask dialogs and the sudo password prompt.
 //
-// This is the half of the SDK that talks to the desktop's `/ui` bridge: the
-// desktop shell renders the popups, and a privileged command only runs after the
-// user approves it in a password modal that shows the exact command.
-//
-// Apps don't construct this directly — every DimAppFrontend / DimAppBackend
-// exposes it as `dimApp.ui` and `dimApp.sudo`:
-//
-//     dimApp.ui.toast("saved")
-//     if (await dimApp.ui.confirm("Delete it?")) { ... }
-//     const name = await dimApp.ui.ask("New name?", { default: "Rex" })  // null if cancelled
-//     const res  = await dimApp.sudo.run(["route", "-n", "add", ...])
-//     //  res = { exitCode, out, stdout, stderr, cancelled }
-//
-// The `/ui` channel is separate from the app bus (`/ws`): it correlates each
-// request↔response by id so a reply goes back only to the caller.
+// The frontend renders these itself — for its own dimApp.ui.* calls, and for the backend's, which arrive over the
+// app's websocket. A popup is a plain DOM overlay with inline styles (it picks up the page's --bg/--fg/--accent
+// variables when it has them), so it needs nothing from the host page.
 
-export const UI_VERSION = "0.2.0"
+const open = new Map() // id -> close(result)
 
-function uiUrl(app) {
-    const q = `role=client&app=${encodeURIComponent(app || "")}`
-    // Browser: same origin as the page.
-    if (typeof location !== "undefined" && location.host) {
-        const proto = location.protocol === "https:" ? "wss:" : "ws:"
-        return `${proto}//${location.host}/ui?${q}`
+function el(tag, style, text) {
+    const node = document.createElement(tag)
+    node.style.cssText = style
+    if (text != null) {
+        node.textContent = text
     }
-    // Deno: loopback to the desktop process.
-    return `ws://${desktopHostPort()}/ui?${q}`
+    return node
 }
 
-/** Read an env var in Deno; undefined in a browser or without env permission. */
-export function readEnv(name) {
-    try {
-        return globalThis.Deno?.env.get(name)
-    } catch {
-        return undefined
+const FONT = "font:13px/1.45 system-ui,-apple-system,sans-serif;"
+const BUTTON = FONT + "padding:6px 14px;border-radius:6px;border:1px solid rgba(127,127,127,.4);cursor:pointer;"
+
+function toast(message, kind) {
+    let stack = document.getElementById("dim-app-toasts")
+    if (!stack) {
+        stack = el(
+            "div",
+            "position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;max-width:360px",
+        )
+        stack.id = "dim-app-toasts"
+        document.body.append(stack)
     }
+    const colors = { ok: "#2e7d32", warn: "#b26a00", error: "#c62828" }
+    const item = el(
+        "div",
+        FONT +
+            `padding:10px 14px;border-radius:8px;color:#fff;background:${
+                colors[kind] ?? "#333"
+            };box-shadow:0 4px 16px rgba(0,0,0,.3)`,
+        message,
+    )
+    stack.append(item)
+    setTimeout(() => item.remove(), 5000)
+    return true
 }
 
-/** "host:port" of the desktop for a Deno backend: DIM_DESKTOP_* first, then the older DIM_DASHBOARD_* names. */
-export function desktopHostPort() {
-    let host = readEnv("DIM_DESKTOP_HOST") || readEnv("DIM_DASHBOARD_HOST") || "127.0.0.1"
-    if (host === "0.0.0.0") {
-        host = "127.0.0.1"
+/** How each method looks, and what OK / Cancel answer. */
+function describe(method, args) {
+    const yesNo = method === "askBoolean"
+    if (method === "confirm" || yesNo) {
+        return {
+            title: args.title || (yesNo ? "Question" : "Confirm"),
+            okText: args.okText || (yesNo ? "Yes" : "OK"),
+            cancelText: args.cancelText || (yesNo ? "No" : "Cancel"),
+            answer: (confirmed) => confirmed,
+        }
     }
-    const port = readEnv("DIM_DESKTOP_PORT") || readEnv("DIM_DASHBOARD_PORT") || "1024"
-    return `${host}:${port}`
+    if (method === "ask") {
+        return {
+            title: args.title ?? "",
+            input: {
+                value: args.default ?? "",
+                placeholder: args.placeholder ?? "",
+                type: args.password ? "password" : "text",
+            },
+            okText: args.okText || "OK",
+            cancelText: args.cancelText || "Cancel",
+            answer: (confirmed, value) => confirmed ? value : null,
+        }
+    }
+    if (method === "password") {
+        const command = Array.isArray(args.command) ? args.command.join(" ") : (args.command ?? "")
+        return {
+            title: args.title || "Administrator privileges required",
+            message: args.reason
+                ? `${args.reason} Enter your password to approve, or Cancel to deny.`
+                : "This app wants to run this command as administrator. Enter your password to approve, or Cancel to deny:",
+            command: command ? `sudo ${command}` : "",
+            input: { value: "", placeholder: "password", type: "password" },
+            okText: "Run",
+            cancelText: "Cancel",
+            danger: true,
+            answer: (confirmed, value) => confirmed ? value : null,
+        }
+    }
+    return null
 }
 
 /**
- * Lazy, reconnecting client for the desktop `/ui` bridge. One per DimApp
- * instance; the socket is opened on first use.
+ * Shows a popup and resolves with its answer: toast → true, confirm/askBoolean → boolean, ask → string or null,
+ * password → string or null. `id` lets cancel(id) take it down without an answer.
  */
-export class DimUi {
-    /** @param {string | (() => string)} appOrGetter  the app's namespace (or a getter for it) */
-    constructor(appOrGetter) {
-        this._app = appOrGetter
-        this._socket = null
-        this._ready = null
-        this._seq = 0
-        this._pending = new Map()
-
-        this.ui = {
-            /** Transient toast. `kind` ∈ "info" | "ok" | "warn" | "error" (optional). */
-            toast: (message, kind) => this._call("toast", { message: String(message ?? ""), kind }),
-            /** Yes/No dialog → boolean. */
-            confirm: (message, opts = {}) => this._call("confirm", { message: String(message ?? ""), ...opts }),
-            /** Text prompt → string, or null if cancelled. Pass { default, placeholder, password }. */
-            ask: (message, opts = {}) => this._call("ask", { message: String(message ?? ""), ...opts }),
-            /** Boolean prompt (yes/no wording) → boolean. */
-            askBoolean: (message, opts = {}) => this._call("askBoolean", { message: String(message ?? ""), ...opts }),
+export function showUi(method, args = {}, id = null) {
+    if (method === "toast") {
+        return Promise.resolve(toast(String(args.message ?? ""), args.kind))
+    }
+    const look = describe(method, args)
+    if (!look) {
+        return Promise.reject(new Error(`unknown ui method: ${method}`))
+    }
+    return new Promise((resolve) => {
+        const overlay = el(
+            "div",
+            "position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)",
+        )
+        const box = el(
+            "div",
+            FONT +
+                "min-width:320px;max-width:520px;padding:18px;border-radius:10px;display:flex;flex-direction:column;gap:10px;" +
+                "background:var(--bg-elevated,var(--bg,#1e1e1e));color:var(--fg,#eee);box-shadow:0 12px 40px rgba(0,0,0,.5)",
+        )
+        box.setAttribute("role", "dialog")
+        box.dataset.dimAppUi = method
+        if (look.title) {
+            box.append(el("div", "font-weight:600;font-size:15px", look.title))
         }
-        this.sudo = {
-            /**
-             * Run a privileged command. The desktop shows a password prompt with the
-             * exact command; nothing runs until the user approves.
-             * @param {string[]} args  argv, e.g. ["route","-n","add","-host","231.1.1.1","-interface","en0"]
-             * @returns {Promise<{exitCode:number|null, out:string, stdout:string, stderr:string, cancelled:boolean}>}
-             */
-            run: (args, opts = {}) => this._call("sudoRun", { args, ...opts }),
+        const message = look.message ?? args.message
+        if (message) {
+            box.append(el("div", "white-space:pre-wrap", message))
         }
-    }
+        if (look.command) {
+            box.append(
+                el(
+                    "pre",
+                    "margin:0;padding:8px;border-radius:6px;background:rgba(127,127,127,.15);white-space:pre-wrap",
+                    look.command,
+                ),
+            )
+        }
+        let input = null
+        if (look.input) {
+            input = el(
+                "input",
+                FONT +
+                    "padding:6px 8px;border-radius:6px;border:1px solid rgba(127,127,127,.5);background:transparent;color:inherit",
+            )
+            Object.assign(input, look.input, { autocomplete: "off" })
+            box.append(input)
+        }
+        const actions = el("div", "display:flex;justify-content:flex-end;gap:8px;margin-top:4px")
+        const cancel = el("button", BUTTON + "background:transparent;color:inherit", look.cancelText)
+        const ok = el(
+            "button",
+            BUTTON + `border:0;color:#fff;background:${look.danger ? "#c62828" : "var(--accent,#2f6fed)"}`,
+            look.okText,
+        )
+        actions.append(cancel, ok)
+        box.append(actions)
+        overlay.append(box)
+        const close = (result) => {
+            open.delete(id)
+            overlay.remove()
+            resolve(result)
+        }
+        const settle = (confirmed) => close(look.answer(confirmed, input?.value ?? ""))
+        if (id != null) {
+            open.set(id, close)
+        }
+        cancel.onclick = () => settle(false)
+        ok.onclick = () => settle(true)
+        overlay.onkeydown = (event) => {
+            if (event.key === "Escape") {
+                settle(false)
+            } else if (event.key === "Enter" && input) {
+                settle(true)
+            }
+        }
+        document.body.append(overlay)
+        setTimeout(() => (input ?? ok).focus(), 30)
+    })
+}
 
-    _appName() {
-        return typeof this._app === "function" ? this._app() : this._app
-    }
-
-    _connect() {
-        if (this._ready) return this._ready
-        this._ready = new Promise((resolve, reject) => {
-            let ws
-            try {
-                ws = new WebSocket(uiUrl(this._appName()))
-            } catch (err) {
-                this._ready = null
-                reject(err)
-                return
-            }
-            ws.onopen = () => { this._socket = ws; resolve(ws) }
-            ws.onerror = () => {
-                if (!this._socket) { this._ready = null; reject(new Error("dim-app: could not reach the desktop /ui service")) }
-            }
-            ws.onclose = () => {
-                this._socket = null
-                this._ready = null
-                for (const p of this._pending.values()) p.reject(new Error("dim-app: /ui connection closed"))
-                this._pending.clear()
-            }
-            ws.onmessage = (event) => {
-                let msg
-                try { msg = JSON.parse(event.data) } catch { return }
-                const p = this._pending.get(msg.id)
-                if (!p) return
-                this._pending.delete(msg.id)
-                if (msg.error) p.reject(new Error(msg.error))
-                else p.resolve(msg.result)
-            }
-        })
-        return this._ready
-    }
-
-    async _call(method, payload) {
-        const ws = await this._connect()
-        const id = "c" + (++this._seq)
-        return await new Promise((resolve, reject) => {
-            this._pending.set(id, { resolve, reject })
-            try {
-                ws.send(JSON.stringify({ id, method, payload: payload || {} }))
-            } catch (err) {
-                this._pending.delete(id)
-                reject(err)
-            }
-        })
-    }
-
-    /** Close the /ui socket (the app bus socket is separate). */
-    close() {
-        try { this._socket?.close() } catch { /* ignore */ }
-        this._socket = null
-        this._ready = null
-    }
+/** Takes down popup `id` (another frontend answered it, or the asker went away); it resolves null. */
+export function cancelUi(id) {
+    open.get(id)?.(null)
 }
