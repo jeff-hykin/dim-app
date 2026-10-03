@@ -16,8 +16,9 @@
 
 import { packBinary, unpackBinary } from "./binary.js"
 import { cancelUi, showUi } from "./ui.js"
+import { captureErrors } from "./errors.js"
 
-export const VERSION = "0.6.1"
+export const VERSION = "0.7.0"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000
@@ -40,11 +41,15 @@ function defaultWsUrl() {
 
 export class DimAppFrontend {
     /**
-     * @param {{ app?: string, url?: string }} [opts]
+     * @param {{ app?: string, url?: string, captureErrors?: boolean }} [opts]
      */
     constructor(opts = {}) {
         this.app = opts.app || detectApp()
         this.url = opts.url || defaultWsUrl()
+        // uncaught errors and unhandled rejections reach Desktop's error feed (errors.js); `captureErrors: false` opts out
+        if (opts.captureErrors !== false) {
+            captureErrors({ source: this.app })
+        }
 
         this._handlers = []
         this._ws = null

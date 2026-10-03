@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.1/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.1/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
@@ -49,6 +49,22 @@ is [events.js](events.js): `const stop = appEvents((event) => ..., { query, onOp
 backoff (0.5 s doubling to 10 s). SDK backends call `app.publishEvent(event)` and serve.js serves the socket; apps with
 their own server (Live Viewer, Map Builder) implement the same route themselves.
 
+## Errors → Desktop's agent
+
+[errors.js](errors.js) sends a page's errors to Desktop's error feed (`POST /api/errors`, relative to the app:
+`../../api/errors`), where a connected agent sees them (its `recent_errors` tool; the newest unacknowledged ones are in
+`desktop_context`), so "it broke" comes with the error.
+
+```js
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/errors.js"
+
+captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
+reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
+```
+
+`source` defaults to the app's name (from `/apps/<name>/`). Reporting never throws and never reports its own failure;
+it is throttled (the same message at most once per 10 s, at most 20 a minute). Desktop dedupes repeats into a count.
+
 ## Popups + privileged commands
 
 Both `DimAppFrontend` and `DimAppBackend` instances have:
@@ -75,7 +91,7 @@ Desktop builds every app with `nix build .#dimosApp`. This repo's flake makes th
 ```nix
 {
     inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.6.1";
+    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.7.0";
     outputs = { self, nixpkgs, dim-app }: {
         packages = dim-app.lib.forAllSystems nixpkgs (pkgs: {
             dimosApp = dim-app.lib.mkDimosApp {
