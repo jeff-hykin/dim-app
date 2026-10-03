@@ -1,7 +1,7 @@
 // dim-app — the built-in popups (browser only): toasts, confirm/ask dialogs and the sudo password prompt.
 //
 // The frontend renders these itself — for its own dimApp.ui.* calls, and for the backend's, which arrive over the
-// app's websocket. A popup is a plain DOM overlay with inline styles (it picks up the page's --bg/--fg/--accent
+// app's websocket. A popup is a plain DOM overlay with inline styles (it picks up the page's dimOS theme tokens
 // variables when it has them), so it needs nothing from the host page.
 
 const open = new Map() // id -> close(result)
@@ -15,26 +15,28 @@ function el(tag, style, text) {
     return node
 }
 
-const FONT = "font:13px/1.45 system-ui,-apple-system,sans-serif;"
-const BUTTON = FONT + "padding:6px 14px;border-radius:6px;border:1px solid rgba(127,127,127,.4);cursor:pointer;"
+const FONT = "font:13px/1.45 var(--sans,system-ui,-apple-system,sans-serif);"
+const BUTTON = FONT +
+    "padding:6px 14px;border-radius:var(--radius,6px);border:1px solid var(--border,rgba(127,127,127,.4));cursor:pointer;"
 
 function toast(message, kind) {
     let stack = document.getElementById("dim-app-toasts")
     if (!stack) {
         stack = el(
             "div",
-            "position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;max-width:360px",
+            "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:min(520px,90vw);pointer-events:none",
         )
         stack.id = "dim-app-toasts"
         document.body.append(stack)
     }
-    const colors = { ok: "#2e7d32", warn: "#b26a00", error: "#c62828" }
+    // the theme's .dim-toast look: a card-colored pill, the border tinted by kind
+    const edges = { ok: "var(--ok,#2e7d32)", warn: "var(--warn,#b26a00)", error: "var(--danger,#c62828)" }
     const item = el(
         "div",
         FONT +
-            `padding:10px 14px;border-radius:8px;color:#fff;background:${
-                colors[kind] ?? "#333"
-            };box-shadow:0 4px 16px rgba(0,0,0,.3)`,
+            "font-size:12.5px;padding:8px 16px;border-radius:999px;background:var(--card,#1e1e1e);color:var(--fg,#eee);" +
+            `border:1px solid ${edges[kind] ?? "var(--border,rgba(127,127,127,.4))"};` +
+            "box-shadow:var(--shadow-lg,0 4px 16px rgba(0,0,0,.3))",
         message,
     )
     stack.append(item)
@@ -104,8 +106,9 @@ export function showUi(method, args = {}, id = null) {
         const box = el(
             "div",
             FONT +
-                "min-width:320px;max-width:520px;padding:18px;border-radius:10px;display:flex;flex-direction:column;gap:10px;" +
-                "background:var(--bg-elevated,var(--bg,#1e1e1e));color:var(--fg,#eee);box-shadow:0 12px 40px rgba(0,0,0,.5)",
+                "min-width:320px;max-width:520px;padding:18px;border-radius:var(--radius-lg,8px);display:flex;flex-direction:column;gap:10px;" +
+                "background:var(--card,var(--bg,#1e1e1e));color:var(--fg,#eee);border:1px solid var(--border,transparent);" +
+                "box-shadow:var(--shadow-lg,0 12px 40px rgba(0,0,0,.5))",
         )
         box.setAttribute("role", "dialog")
         box.dataset.dimAppUi = method
@@ -120,7 +123,7 @@ export function showUi(method, args = {}, id = null) {
             box.append(
                 el(
                     "pre",
-                    "margin:0;padding:8px;border-radius:6px;background:rgba(127,127,127,.15);white-space:pre-wrap",
+                    "margin:0;padding:8px;border-radius:var(--radius,6px);background:var(--muted,rgba(127,127,127,.15));font-family:var(--mono,monospace);white-space:pre-wrap",
                     look.command,
                 ),
             )
@@ -130,7 +133,7 @@ export function showUi(method, args = {}, id = null) {
             input = el(
                 "input",
                 FONT +
-                    "padding:6px 8px;border-radius:6px;border:1px solid rgba(127,127,127,.5);background:transparent;color:inherit",
+                    "padding:6px 8px;border-radius:var(--radius,6px);border:1px solid var(--input,rgba(127,127,127,.5));background:transparent;color:inherit",
             )
             Object.assign(input, look.input, { autocomplete: "off" })
             box.append(input)
@@ -139,7 +142,10 @@ export function showUi(method, args = {}, id = null) {
         const cancel = el("button", BUTTON + "background:transparent;color:inherit", look.cancelText)
         const ok = el(
             "button",
-            BUTTON + `border:0;color:#fff;background:${look.danger ? "#c62828" : "var(--accent,#2f6fed)"}`,
+            BUTTON +
+                (look.danger
+                    ? "border:0;color:var(--danger-fg,#fff);background:var(--danger,#c62828)"
+                    : "border:0;color:var(--primary-fg,#fff);background:var(--primary,#2f6fed)"),
             look.okText,
         )
         actions.append(cancel, ok)
