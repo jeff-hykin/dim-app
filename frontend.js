@@ -17,7 +17,7 @@
 import { packBinary, unpackBinary } from "./binary.js"
 import { cancelUi, showUi } from "./ui.js"
 
-export const VERSION = "0.5.0"
+export const VERSION = "0.6.0"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000

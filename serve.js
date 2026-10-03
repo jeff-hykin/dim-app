@@ -1,5 +1,6 @@
 // A dimos-app-server for dim-app SDK apps: serves the frontend directory on Desktop's socket, runs the backend module
-// in this process, and bridges the two over a websocket at `/dim-app/ws`. An app's flake wraps it as
+// in this process, and bridges the two over a websocket at `/dim-app/ws`. `/api/events/ws` carries the backend's
+// publishEvent() JSON to pages (the standard backend → page channel, see events.js). An app's flake wraps it as
 // bin/dimos-app-server:
 //     deno run -A serve.js --frontend <dir> [--backend <main.js>] --socket <path> [Desktop's other flags]
 import { serveDir } from "jsr:@std/http@1/file-server"
@@ -28,6 +29,22 @@ function broadcast(frame) {
             ws.send(frame)
         }
     }
+}
+
+// pages subscribed to /api/events/ws: one JSON event per text message
+const eventPages = new Set()
+function publish(json) {
+    for (const ws of eventPages) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(json)
+        }
+    }
+}
+function eventsSocket(request) {
+    const { socket: ws, response } = Deno.upgradeWebSocket(request)
+    ws.onopen = () => eventPages.add(ws)
+    ws.onclose = () => eventPages.delete(ws)
+    return response
 }
 
 // every open frontend shows the popup; the first answer wins and the others take theirs down
@@ -106,7 +123,7 @@ const ctx = {
     desktopUrl: flag("desktop-url") ?? env("DIMOS_DESKTOP_URL"),
 }
 // seeded before the import, so `new DimAppBackend()` at main.js's top level finds its name, context and host
-const registry = { version: "serve", current: name, registered: new Map(), ctx, host: { send: broadcast, ui, sudoRun } }
+const registry = { version: "serve", current: name, registered: new Map(), ctx, host: { send: broadcast, publish, ui, sudoRun } }
 globalThis[Symbol.for("dim.app")] = registry
 
 if (backend) {
@@ -165,8 +182,15 @@ try {
 }
 Deno.serve(
     { path: socket, onListen: () => console.log(`serving ${frontend} on ${socket}`) },
-    (request) =>
-        new URL(request.url).pathname === "/dim-app/ws" && request.headers.get("upgrade")?.toLowerCase() === "websocket"
-            ? bridge(request)
-            : serveDir(request, { fsRoot: frontend, quiet: true }),
+    (request) => {
+        const upgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket"
+        const path = new URL(request.url).pathname
+        if (upgrade && path === "/dim-app/ws") {
+            return bridge(request)
+        }
+        if (upgrade && path === "/api/events/ws") {
+            return eventsSocket(request)
+        }
+        return serveDir(request, { fsRoot: frontend, quiet: true })
+    },
 )

@@ -18,14 +18,14 @@
 //       current,                 // the app's name
 //       registered: Map,         // app name -> live DimAppBackend
 //       ctx,                     // see dimContext()
-//       host,                    // serve.js: { send(frame), ui(method, args), sudoRun(payload) }
+//       host,                    // serve.js: { send(frame), publish(json), ui(method, args), sudoRun(payload) }
 //     }
 //
 // `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` are shown by the app's open frontends.
 
 import { packBinary, unpackBinary } from "./binary.js"
 
-export const VERSION = "0.5.0"
+export const VERSION = "0.6.0"
 
 const DIM = Symbol.for("dim.app")
 
@@ -182,6 +182,17 @@ export class DimAppBackend {
             throw new Error(`DimAppBackend(${this.app}): sendBytes() after close()`)
         }
         host().send(packBinary(kind, bytes, meta))
+    }
+
+    /**
+     * Push one JSON event to every page subscribed to `api/events/ws` (events.js's appEvents on the page): the
+     * standard backend → page channel, also for pages that don't use DimAppFrontend.
+     */
+    publishEvent(event) {
+        if (this._closed) {
+            throw new Error(`DimAppBackend(${this.app}): publishEvent() after close()`)
+        }
+        host().publish(JSON.stringify(event))
     }
 
     /** Stop receiving and deregister. */
