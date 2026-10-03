@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.1/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.6.1/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
@@ -75,7 +75,7 @@ Desktop builds every app with `nix build .#dimosApp`. This repo's flake makes th
 ```nix
 {
     inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.6.0";
+    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.6.1";
     outputs = { self, nixpkgs, dim-app }: {
         packages = dim-app.lib.forAllSystems nixpkgs (pkgs: {
             dimosApp = dim-app.lib.mkDimosApp {
