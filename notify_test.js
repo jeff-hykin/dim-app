@@ -15,7 +15,13 @@ Deno.test("notify posts the payload to <origin>/api/notifications", async () => 
         return Promise.resolve(new Response(JSON.stringify({ id: 7 })))
     }
     try {
-        const id = await notify({ title: "Battery low", body: "14%", sound: "battery", kind: "warn", app: "controller" }, { origin: "http://127.0.0.1:7000" })
+        const id = await notify({
+            title: "Battery low",
+            body: "14%",
+            sound: "battery",
+            kind: "warn",
+            app: "controller",
+        }, { origin: "http://127.0.0.1:7000" })
         assertEquals(id, 7)
         assertEquals(seen[0][0], "http://127.0.0.1:7000/api/notifications")
         assertEquals(seen[0][1].sound, "battery")
@@ -27,7 +33,12 @@ Deno.test("notify posts the payload to <origin>/api/notifications", async () => 
 
 Deno.test("lowLevelAlert fires once per dip, re-arms above low + hysteresis", () => {
     const sent = []
-    const alert = lowLevelAlert({ low: 20, hysteresis: 5, notification: (v) => ({ title: String(v) }), send: (n) => sent.push(n.title) })
+    const alert = lowLevelAlert({
+        low: 20,
+        hysteresis: 5,
+        notification: (v) => ({ title: String(v) }),
+        send: (n) => sent.push(n.title),
+    })
     for (const v of [50, 21, 20, 15, 10, 22, 24, 19, 26, 18, NaN]) {
         alert(v)
     }

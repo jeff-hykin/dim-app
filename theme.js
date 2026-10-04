@@ -163,7 +163,9 @@ export function mountThemeToggle(container) {
     button.className = "dim-theme-toggle"
     const label = () => {
         button.textContent = isDark() ? "Portal" : "Research"
-        button.title = `Theme: ${button.textContent}${themeChoice() === "auto" ? " (follows the system)" : ""} — click to switch`
+        button.title = `Theme: ${button.textContent}${
+            themeChoice() === "auto" ? " (follows the system)" : ""
+        } — click to switch`
     }
     button.addEventListener("click", toggleTheme)
     onThemeChange(label)
