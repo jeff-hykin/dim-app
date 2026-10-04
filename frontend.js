@@ -18,7 +18,7 @@ import { packBinary, unpackBinary } from "./binary.js"
 import { cancelUi, showUi } from "./ui.js"
 import { captureErrors } from "./errors.js"
 
-export const VERSION = "0.9.3"
+export const VERSION = "0.9.4"
 
 const RECONNECT_MIN_MS = 250
 const RECONNECT_MAX_MS = 5000

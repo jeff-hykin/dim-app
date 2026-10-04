@@ -25,7 +25,7 @@
 
 import { packBinary, unpackBinary } from "./binary.js"
 
-export const VERSION = "0.9.3"
+export const VERSION = "0.9.4"
 
 const DIM = Symbol.for("dim.app")
 
