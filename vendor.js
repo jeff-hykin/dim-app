@@ -2,7 +2,7 @@
 // Refreshes an app's vendored copy of dim-app (the files already in that folder) from the dim-app version this script
 // was loaded from, so the version an app pins is the URL it ran:
 //
-//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.2/vendor.js frontend/src/dim-app
+//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.3/vendor.js frontend/src/dim-app
 //
 // A new app: create the folder with the files it wants (e.g. `touch theme.css theme.js theme.d.ts`), then run it.
 const folder = Deno.args[0]
