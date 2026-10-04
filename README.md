@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
@@ -56,7 +56,7 @@ their own server (Live Viewer, Map Builder) implement the same route themselves.
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -75,7 +75,7 @@ reconnects with backoff. One connection is shared by all subscriptions.
 
 ```js
 // a Deno backend that hears when any app's endpoints change ({type:"endpoints", app, added, removed})
-import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/desktop_events.js"
+import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/desktop_events.js"
 
 const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
     console.log(`${app}: +${added.length} -${removed.length} endpoints`)
@@ -89,7 +89,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -131,18 +131,18 @@ Apps vendor these files (no build step at runtime, works offline). [vendor.js](v
 app already has from the version in its URL, which is how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.0/vendor.js frontend/src/dim-app
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.1/vendor.js frontend/src/dim-app
 ```
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/theme.css">
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/theme.css">
 import {
     initTheme,
     mountThemeToggle,
     onThemeChange,
     themeColors,
     toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/theme.js"
+} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.1/theme.js"
 
 initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
 mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
