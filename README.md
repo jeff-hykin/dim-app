@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
@@ -56,7 +56,7 @@ their own server (Live Viewer, Map Builder) implement the same route themselves.
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -64,6 +64,43 @@ reportError("Couldn't save the map", error.stack, { level: "error" }) // handled
 
 `source` defaults to the app's name (from `/apps/<name>/`). Reporting never throws and never reports its own failure;
 it is throttled (the same message at most once per 10 s, at most 20 a minute). Desktop dedupes repeats into a count.
+
+## Notifications → Desktop's notification center
+
+[notify.js](notify.js) posts to Desktop's `POST /api/notifications` (an absolute path: apps share Desktop's origin
+under `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
+
+```js
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/notify.js"
+
+notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
+notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
+
+// once per dip below 20 %, re-armed above 25 %
+const battery = lowLevelAlert({ low: 20, hysteresis: 5, notification: (pct) => ({ title: "Battery low", body: `${pct}%`, kind: "warn", sound: "battery" }) })
+battery(percent) // on every reading
+```
+
+`sound` is `default` (vibraphone), `urgent` (arpeggio) or `battery` (game-over drop); `icon` defaults to the app's
+own icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
+
+## Theme: Portal (dark) + Research (light)
+
+[theme.css](theme.css) is the shared component layer (`.dim-btn`, `.dim-card`, `.dim-input`, … all on CSS variables)
+with the Desktop mockup's two palettes: **Portal** (void `#05070d`, ink `#ece8f0`, blue `#7cc8ec`, translucent
+near-black panels, white hairlines, Inter + IBM Plex Mono) and **Research** (paper `#f5f4ef`, white hairline cards,
+blue `#293ce4`, Instrument Serif display + IBM Plex Mono labels). [theme.js](theme.js) picks one from
+`prefers-color-scheme` (dark → Portal, light → Research), or the app's own saved choice (per app, in
+`localStorage["dim-app.theme:<app>"]`); apps keep their own theme, separate from Desktop's.
+
+```js
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/theme.css">
+import { initTheme, mountThemeToggle, onThemeChange, themeColors, toggleTheme } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.0/theme.js"
+
+initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
+mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
+onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
+```
 
 ## Popups + privileged commands
 
