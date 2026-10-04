@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
@@ -56,7 +56,7 @@ their own server (Live Viewer, Map Builder) implement the same route themselves.
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -75,7 +75,7 @@ reconnects with backoff. One connection is shared by all subscriptions.
 
 ```js
 // a Deno backend that hears when any app's endpoints change ({type:"endpoints", app, added, removed})
-import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/desktop_events.js"
+import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/desktop_events.js"
 
 const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
     console.log(`${app}: +${added.length} -${removed.length} endpoints`)
@@ -89,7 +89,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -108,22 +108,41 @@ icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { ori
 
 ## Theme: Portal (dark) + Research (light)
 
-[theme.css](theme.css) is the shared component layer (`.dim-btn`, `.dim-card`, `.dim-input`, … all on CSS variables)
-with the Desktop mockup's two palettes: **Portal** (void `#05070d`, ink `#ece8f0`, blue `#7cc8ec`, translucent
-near-black panels, white hairlines, Inter + IBM Plex Mono) and **Research** (paper `#f5f4ef`, white hairline cards, blue
-`#293ce4`, Instrument Serif display + IBM Plex Mono labels). [theme.js](theme.js) picks one from `prefers-color-scheme`
-(dark → Portal, light → Research), or the app's own saved choice (per app, in `localStorage["dim-app.theme:<app>"]`);
-apps keep their own theme, separate from Desktop's.
+[theme.css](theme.css) is the shared component layer, value for value from Desktop's two design docs: **Portal**
+(dark: void `#05070d`, ink `#ece8f0`, one accent `#7cc8ec`, square corners everywhere, 1px hairlines, glow only on
+focus / active things; Inter for UI, IBM Plex Mono for data, Michroma for small uppercase section heads) and
+**Research** (light: paper `#f5f4ef`, white hairline cards with a soft shadow, accent `#293ce4`, 8–14px corners and
+pills for chips / toggles / bars; Instrument Serif titles, Inter, uppercase Plex Mono micro-labels). Color is status
+only (`--ok`, `--warn`); Portal has no red, so `--danger` is the warn amber there. [theme.js](theme.js) picks one from
+`prefers-color-scheme` (dark → Portal, light → Research), or the app's own saved choice (per app, in
+`localStorage["dim-app.theme:<app>"]`); apps keep their own theme, separate from Desktop's.
+
+Components: `.dim-btn` (`.primary` `.ghost` `.danger` `.sm` `.lg` `.icon` `.round`, `.on` / `aria-pressed`),
+`.dim-input` / `.dim-select` / `.dim-textarea`, `.dim-ask` (input + send button), `.dim-check` (`.box` / `.ring`),
+`.dim-switch` (`.track`), `.dim-range`, `.dim-progress`, `.dim-tabs` + `.dim-tab` (segmented; `.dim-tabs.line` for
+underline tabs), `.dim-chip` / `.dim-badge` (`.ok` `.warn` `.danger` `.solid`), `.dim-dot`, `.dim-menu` +
+`.dim-menu-item`, `.dim-tooltip`, `.dim-card` / `.dim-panel` (`.glass`), `.dim-sheet` / `.dim-modal` (header, footer),
+`.dim-kv`, `.dim-table`, `.dim-alert`, `.dim-toast`, and type: `.dim-title` (the app's name in its bar), `.dim-h1`,
+`.dim-h2`, `.dim-h3` / `.dim-label`, `.dim-mono`. App CSS stays on the variables (`--fg`, `--muted-fg`, `--card`,
+`--border`, `--primary`, `--sel`, `--radius`, `--radius-lg`, `--radius-pill`, `--sans`, `--mono`, `--display`, …):
+the radius tokens are 0 in Portal, and Portal squares every corner anyway, as its doc does.
+
+Apps vendor these files (no build step at runtime, works offline). [vendor.js](vendor.js) refreshes the dim-app files an
+app already has from the version in its URL, which is how an app pins a version:
+
+```sh
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.0/vendor.js frontend/src/dim-app
+```
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/theme.css">
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/theme.css">
 import {
     initTheme,
     mountThemeToggle,
     onThemeChange,
     themeColors,
     toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.8.1/theme.js"
+} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.0/theme.js"
 
 initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
 mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
