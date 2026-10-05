@@ -10,7 +10,7 @@ process, and bridges the two over a websocket at `dim-app/ws`, relative to the a
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
@@ -116,6 +116,62 @@ serve the bytes over HTTP). A backend that links zenoh (Rust, C++, Python) may p
 reads Desktop's URL and the app's name from `DIMOS_APP`. `DimAppBackend`'s `publishEvent(event)` is
 `publishFrontend("events", event)`.
 
+## Inside Desktop: insets, opening apps, first-run messages
+
+**Insets.** On a desktop-width window Desktop's floating dock sits over the bottom of every app. The shell posts how
+much (`{type: "dimos-inset", top, bottom, left, right}`, Desktop's docs/apps.md) and `initTheme()` keeps
+`--dim-inset-top`, `--dim-inset-bottom`, `--dim-inset-left` and `--dim-inset-right` current on `:root` (all `0px`
+outside Desktop and on a phone, where the dock has its own row; `initInsets()` alone if an app doesn't use the theme).
+Anything the user has to reach (drive bars, toolbars, panels, the end of a scrolling list) stays above it;
+backgrounds and 3D views can stay full-bleed:
+
+```css
+.drive-bar {
+    bottom: calc(12px + var(--dim-inset-bottom));
+}
+.side-panel {
+    bottom: var(--dim-inset-bottom);
+}
+.list {
+    padding-bottom: var(--dim-inset-bottom);
+}
+```
+
+**Opening other apps** — [desktop.js](desktop.js):
+
+```js
+import { appInstalled, emptyState, openApp } from "./dim-app/desktop.js"
+
+await openApp("launcher", { kind: "blueprint", stream: "cmd_vel" }) // the Launcher, on blueprints that drive a robot
+await openApp("dim-controller", { path: "#record" }) // an app, by install name or title, at a path inside it
+await openApp("appstore") // built-ins: launcher, appstore, settings, desktop
+await appInstalled("dim-controller") // built-ins are always installed; false outside Desktop
+```
+
+Inside Desktop's shell the app opens in the same window; a page opened on its own under Desktop opens it in a new tab;
+outside Desktop `openApp` resolves to false. For the Launcher, `params` sets its filters (`query`, `kind`, `robot`,
+`selected`, `stream`; the rest are cleared).
+
+**First-run / empty / error messages.** Every state a first-time user can hit (nothing running, the topic the app
+needs missing, no recordings, the backend down, not logged in) gets a message that says what's wrong and a button for
+the next step. `emptyState()` draws it in the theme (`.dim-empty`; wrap in `.dim-empty-layer` to center it over a
+canvas, above the dock); a button to an app that isn't installed becomes "Install <app> from the App Store":
+
+```js
+view.replaceChildren(emptyState({
+    label: "No blueprint running",
+    title: "You need to launch a blueprint with a cmd_vel topic before you can control a robot",
+    body: "No robot? Turn on replay in the Launcher to drive a recorded one.",
+    actions: [
+        { label: "Open the Launcher", app: "launcher", params: { kind: "blueprint", stream: "cmd_vel" } },
+        { label: "Record with the Controller", app: "dim-controller", appTitle: "the Controller" },
+        { label: "Try again", onClick: retry },
+    ],
+}))
+```
+
+React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` from [react.js](react.js).
+
 ## Errors → Desktop's agent
 
 [errors.js](errors.js) sends a page's errors to Desktop's error feed (`POST /api/errors`, relative to the app:
@@ -123,7 +179,7 @@ reads Desktop's URL and the app's name from `DIMOS_APP`. `DimAppBackend`'s `publ
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -156,7 +212,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -198,23 +254,24 @@ The four faces are bundled in [fonts/](fonts) (latin subset, OFL) and declared w
 starts loading all of them, and `themeFontsReady()` resolves when they are in. Nothing is fetched from the network.
 
 Apps vendor dim-app's files (no build step at runtime, works offline): `zenoh.js` needs `zenoh_web_client.js` next to
-it, `backend_state.js` needs `zenoh.js`, `react.js` needs `backend_state.js`, `events.js` and `desktop_events.js` need
-`zenoh.js`. [vendor.js](vendor.js) refreshes the dim-app files an app already has from the version in its URL, which is
+it, `backend_state.js` needs `zenoh.js`, `react.js` needs `backend_state.js` and `desktop.js`, `events.js` and `desktop_events.js` need
+`zenoh.js`. [vendor.js](vendor.js) refreshes the dim-app files an app already has (and brings any file they import) from the
+version in its URL, which is
 how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.10.2/vendor.js frontend/src/dim-app
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.11.0/vendor.js frontend/src/dim-app
 ```
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/theme.css">
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/theme.css">
 import {
     initTheme,
     mountThemeToggle,
     onThemeChange,
     themeColors,
     toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.10.2/theme.js"
+} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.11.0/theme.js"
 
 initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
 mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
