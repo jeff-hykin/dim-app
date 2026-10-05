@@ -10,7 +10,7 @@ process, and bridges the two over a websocket at `dim-app/ws`, relative to the a
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
@@ -179,7 +179,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -212,7 +212,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -228,6 +228,32 @@ battery(percent) // on every reading
 
 `sound` is `default` (vibraphone), `urgent` (arpeggio) or `battery` (game-over drop); `icon` defaults to the app's own
 icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
+
+## Shell commands (sudo too) → Desktop
+
+[shell.js](shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
+shows them over the app with a note for each, nothing runs until the user presses Run, they run in one terminal (sudo
+asks for the password once), and when one fails the user or Desktop's agent fixes it in that terminal and retries it.
+It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
+
+```js
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/shell.js"
+
+const result = await runShell({
+    title: "Fix LAN discovery",
+    message: "A VPN took the route the Go2 probe needs.",
+    commands: [
+        { run: "sudo route -n add -host 231.1.1.1 -interface en0", note: "Send the probe over Wi-Fi" },
+        { run: "route -n get 231.1.1.1", note: "Check the route", needsStdout: true }, // stdout/stderr come back apart
+    ],
+})
+// result.status: succeeded | failed | cancelled; result.commands[i]: { status, exitCode, output, stdout, stderr }
+const one = await runCommand("id -u", { title: "Who am I", needsStdout: true }) // { status, exitCode, stdout, ... }
+```
+
+`needsStdout` pipes the command's output through `tee`, so it sees pipes instead of a terminal (no progress bars); such
+a command always runs again after a fix, so its stdout is the real one. A Deno backend passes Desktop's URL and its own
+name: `runShell({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
 
 ## Theme: Portal (dark) + Research (light)
 
@@ -255,12 +281,12 @@ starts loading all of them, and `themeFontsReady()` resolves when they are in. N
 
 Apps vendor dim-app's files (no build step at runtime, works offline): `zenoh.js` needs `zenoh_web_client.js` next to
 it, `backend_state.js` needs `zenoh.js`, `react.js` needs `backend_state.js` and `desktop.js`, `events.js` and `desktop_events.js` need
-`zenoh.js`. [vendor.js](vendor.js) refreshes the dim-app files an app already has (and brings any file they import) from the
+`zenoh.js` (`shell.js` and `notify.js` stand alone). [vendor.js](vendor.js) refreshes the dim-app files an app already has (and brings any file they import) from the
 version in its URL, which is
 how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.12.1/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.13.0/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
@@ -269,14 +295,14 @@ app's saved choice) before any CSS or JS loads, so an app never flashes white wh
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/theme.css">
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/theme.css">
 import {
     initTheme,
     mountThemeToggle,
     onThemeChange,
     themeColors,
     toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.12.1/theme.js"
+} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.0/theme.js"
 
 initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
 mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
