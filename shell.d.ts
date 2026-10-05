@@ -33,4 +33,4 @@ export function runCommand(
     run: string,
     details: { title: string; note?: string; message?: string; needsStdout?: boolean; app?: string; timeout?: number },
     options?: ShellOptions,
-): Promise<Partial<ShellCommandResult> & { status: string; reason?: string | null }>
+): Promise<Partial<Omit<ShellCommandResult, "status">> & { status: ShellSession["status"]; reason?: string | null }>
