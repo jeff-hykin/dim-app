@@ -1,6 +1,6 @@
 // Types for backend_state.js
 import type { AppZenoh } from "./zenoh.d.ts"
-export interface BackendStateSnapshot<T = any> {
+export interface BackendStateSnapshot<T = unknown> {
     data: T | undefined
     loading: boolean
     error: Error | null
@@ -21,7 +21,7 @@ export function resolveSource(
     source: string,
     options?: BackendStateOptions,
 ): { url: string; key: string; topic: string }
-export function watchBackendState<T = any>(
+export function watchBackendState<T = unknown>(
     source: string,
     onChange: (snapshot: BackendStateSnapshot<T>) => void,
     options?: BackendStateOptions,

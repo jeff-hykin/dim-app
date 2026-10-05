@@ -31,7 +31,7 @@ export interface AppZenoh {
     readonly app: string | null
     readonly ready: Promise<AppZenoh>
     readonly info: ZenohInfo | null
-    readonly client: any
+    readonly client: unknown
     readonly state: ConnectionState
     readonly namespace: string | null
     readonly prefix: string | null
@@ -40,22 +40,22 @@ export interface AppZenoh {
         options: SubscribeOptions,
         callback: (message: ZenohMessage) => void,
     ): () => void
-    subscribeFrontend<T = any>(
+    subscribeFrontend<T = unknown>(
         topic: string,
         callback: (payload: T, message: ZenohMessage) => void,
         options?: PayloadOptions,
     ): () => void
-    subscribeDesktop<T = any>(
+    subscribeDesktop<T = unknown>(
         type: string,
         callback: (event: T, message: ZenohMessage) => void,
         options?: PayloadOptions,
     ): () => void
-    subscribeDimos<T = any>(
+    subscribeDimos<T = unknown>(
         type: string,
         callback: (event: T, message: ZenohMessage) => void,
         options?: PayloadOptions,
     ): () => void
-    subscribeJob<T = any>(
+    subscribeJob<T = unknown>(
         jobId: string,
         callback: (event: T, message: ZenohMessage) => void,
         options?: PayloadOptions,
@@ -68,7 +68,7 @@ export interface GetZenohOptions {
     app?: string
     href?: string
     base?: string
-    connect?: (url: string, options: any) => Promise<any>
+    connect?: (url: string, options: Record<string, unknown>) => Promise<unknown>
     connectOptions?: Record<string, unknown>
     zenohWebUrl?: string
     fetch?: typeof fetch
