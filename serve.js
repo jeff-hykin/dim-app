@@ -1,7 +1,7 @@
 // A dimos-app-server for dim-app SDK apps: serves the frontend directory on Desktop's socket, runs the backend module
-// in this process, and bridges the two over a websocket at `/dim-app/ws`. `/api/events/ws` carries the backend's
-// publishEvent() JSON to pages (the standard backend → page channel, see events.js). An app's flake wraps it as
-// bin/dimos-app-server:
+// in this process, and bridges the two over a websocket at `/dim-app/ws` (the SDK's own request/answer channel). The
+// backend's publishEvent() goes to pages over zenoh through Desktop's relay (frontend_publish.js, events.js). An app's
+// flake wraps it as bin/dimos-app-server:
 //     deno run -A serve.js --frontend <dir> [--backend <main.js>]
 // Desktop passes the socket and the rest in the DIMOS_APP env var (older Desktops: as flags; see app_env.js).
 import { serveDir } from "jsr:@std/http@1/file-server"
@@ -32,22 +32,6 @@ function broadcast(frame) {
             ws.send(frame)
         }
     }
-}
-
-// pages subscribed to /api/events/ws: one JSON event per text message
-const eventPages = new Set()
-function publish(json) {
-    for (const ws of eventPages) {
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send(json)
-        }
-    }
-}
-function eventsSocket(request) {
-    const { socket: ws, response } = Deno.upgradeWebSocket(request)
-    ws.onopen = () => eventPages.add(ws)
-    ws.onclose = () => eventPages.delete(ws)
-    return response
 }
 
 // every open frontend shows the popup; the first answer wins and the others take theirs down
@@ -121,7 +105,7 @@ const name = dimosApp.name || "app"
 // everything in DIMOS_APP, plus `python` (dimosPython's old name)
 const ctx = { ...dimosApp, python: dimosApp.dimosPython }
 // seeded before the import, so `new DimAppBackend()` at main.js's top level finds its name, context and host
-const registry = { version: "serve", current: name, registered: new Map(), ctx, host: { send: broadcast, publish, ui, sudoRun } }
+const registry = { version: "serve", current: name, registered: new Map(), ctx, host: { send: broadcast, ui, sudoRun } }
 globalThis[Symbol.for("dim.app")] = registry
 
 if (backend) {
@@ -185,9 +169,6 @@ Deno.serve(
         const path = new URL(request.url).pathname
         if (upgrade && path === "/dim-app/ws") {
             return bridge(request)
-        }
-        if (upgrade && path === "/api/events/ws") {
-            return eventsSocket(request)
         }
         return serveDir(request, { fsRoot: frontend, quiet: true })
     },

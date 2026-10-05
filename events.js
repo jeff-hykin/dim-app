@@ -1,66 +1,40 @@
-// The standard way an app's backend pushes to its page: a websocket at the app-relative `api/events/ws`, one JSON event
-// per text message. One socket per page (not SSE): every app shares Desktop's origin, and an SSE stream holds one of
-// the browser's 6 HTTP/1.1 connections per host, so a few open apps starve the rest. Websockets don't count there.
+// The standard way an app's backend pushes events to its page (Desktop's docs/events.md): the backend publishes each
+// JSON event on its frontend topic `events` (`publishFrontend("events", event)`, or DimAppBackend's publishEvent), and
+// the page hears it on its one zenoh-web connection, in order (reliable delivery, one key).
 //
-//     import { appEvents } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.7.0/events.js"
-//     const stop = appEvents((event) => { ... }, { query: { page: id }, onOpen, onClose })
+//     import { appEvents } from "./dim-app/events.js"
+//     const stop = appEvents((event) => { ... }, { onOpen, onClose })
 //
-// Reconnects forever with backoff (0.5s doubling to 10s, reset after a connection that lived 5s). Returns unsubscribe.
+// `onOpen()` runs when the connection is up (first time and after every reconnect: re-GET then, events sent while it
+// was down are gone); `onClose({ wasOpen })` when it's lost. Returns unsubscribe.
 
-export const EVENTS_PATH = "api/events/ws"
+import { getZenoh } from "./zenoh.js"
+
+export const EVENTS_TOPIC = "events"
 
 /**
  * @param {(event: any) => void} onEvent called with each parsed JSON event
- * @param {{ path?: string, query?: Record<string, string>, onOpen?: () => void, onClose?: (info: { wasOpen: boolean }) => void }} [options]
- * @returns {() => void} closes the socket and stops reconnecting
+ * @param {{ topic?: string, onOpen?: () => void, onClose?: (info: { wasOpen: boolean }) => void, zenoh?: any }} [options]
+ * @returns {() => void}
  */
 export function appEvents(onEvent, options = {}) {
-    const url = new URL(options.path ?? EVENTS_PATH, location.href)
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-    for (const [key, value] of Object.entries(options.query ?? {})) {
-        url.searchParams.set(key, value)
+    const zenoh = options.zenoh ?? getZenoh()
+    const off = zenoh.subscribeFrontend(options.topic ?? EVENTS_TOPIC, (event) => onEvent(event))
+    let wasOpen = zenoh.state === "connected"
+    if (wasOpen) {
+        queueMicrotask(() => options.onOpen?.())
     }
-    let socket = null
-    let closed = false
-    let delay = 500
-    let timer = null
-    const connect = () => {
-        const openedAt = Date.now()
-        let wasOpen = false
-        socket = new WebSocket(url)
-        socket.onopen = () => {
+    const offState = zenoh.onState((state) => {
+        if (state === "connected" && !wasOpen) {
             wasOpen = true
             options.onOpen?.()
-        }
-        socket.onmessage = ({ data }) => {
-            if (typeof data !== "string") {
-                return
-            }
-            let event
-            try {
-                event = JSON.parse(data)
-            } catch {
-                return // a malformed event is dropped
-            }
-            onEvent(event)
-        }
-        // every lost or failed connection, so a page loaded while the server is down can show it
-        socket.onclose = () => {
+        } else if (state === "lost") {
             options.onClose?.({ wasOpen })
-            if (closed) {
-                return
-            }
-            if (Date.now() - openedAt > 5000) {
-                delay = 500
-            }
-            timer = setTimeout(connect, delay)
-            delay = Math.min(delay * 2, 10000)
+            wasOpen = false
         }
-    }
-    connect()
+    })
     return () => {
-        closed = true
-        clearTimeout(timer)
-        socket?.close()
+        off()
+        offState()
     }
 }

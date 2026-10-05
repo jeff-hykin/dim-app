@@ -11,7 +11,7 @@ function readEnv(name) {
 
 /**
  * `{ version, name, socket, url, path, dataDir, desktopUrl, zenohWebUrl, zenohConnect, dimosDir, dimosPython,
- * recordingsDir }`; a field the Desktop didn't give is null.
+ * recordingsDir, zenohNamespace, zenohPrefix }`; a field the Desktop didn't give is null.
  * @param {string[]} [args] the server's argv (the old flags)
  */
 export function readDimosApp(args = globalThis.Deno?.args ?? []) {
@@ -44,5 +44,7 @@ function fallback(args) {
         dimosDir: flag("dimos-dir") ?? readEnv("DIMOS_DIR") ?? null,
         dimosPython: flag("dimos-python") ?? readEnv("DIMOS_PYTHON") ?? null,
         recordingsDir: readEnv("DIMOS_RECORDINGS_DIR") ?? null,
+        zenohNamespace: null,
+        zenohPrefix: null,
     }
 }
