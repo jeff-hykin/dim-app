@@ -2,12 +2,13 @@
 // object per `data:` line, typed by its `type`: apps, endpoints, blueprints, runs, notification, notifications,
 // ui-settings, dimos, job, recordings, agent).
 //
-//     import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/desktop_events.js"
+//     import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/desktop_events.js"
 //     const off = onDesktopEvent("endpoints", (event) => refreshTools())   // or "*" for every event
 //     off()                                                                // unsubscribe
 //
 // Browser: an EventSource on the same origin ("/api/events"; apps are served under /apps/<name>/). Deno (an app's
-// backend): fetches the stream from the Desktop URL its server was given (`--desktop-url`, else DIMOS_DESKTOP_URL),
+// backend): fetches the stream from the Desktop URL its server was given (DIMOS_APP's desktopUrl, else
+// DIMOS_DESKTOP_URL),
 // parses the `data:` lines, and reconnects with backoff (0.5 s doubling to 10 s). One connection per process/page,
 // shared by every subscription; it closes when the last one unsubscribes. Never throws.
 
@@ -70,7 +71,8 @@ function desktopUrlFromServer() {
         return ctx.desktopUrl
     }
     try {
-        return globalThis.Deno?.env.get("DIMOS_DESKTOP_URL") ?? null
+        const app = globalThis.Deno?.env.get("DIMOS_APP")
+        return (app && JSON.parse(app).desktopUrl) || (globalThis.Deno?.env.get("DIMOS_DESKTOP_URL") ?? null)
     } catch {
         return null
     }
@@ -129,7 +131,7 @@ function connectFetch(url) {
  * @param {string} type
  * @param {(event: { type: string, [key: string]: unknown }) => void} callback
  * @param {{ desktopUrl?: string }} [options] Desktop's base URL; default: same origin (browser) or the server's
- *   --desktop-url / DIMOS_DESKTOP_URL (Deno)
+ *   DIMOS_APP's desktopUrl (Deno)
  * @returns {() => void}
  */
 export function onDesktopEvent(type, callback, options = {}) {

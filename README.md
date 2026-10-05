@@ -10,7 +10,7 @@ forwarding `/apps/<name>/` to that server.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,20 +20,25 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/backend.js"
 
 const app = new DimAppBackend()
-const ctx = dimContext() // { dimosDir, python, zenohWebUrl, desktopUrl }
+const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
 app.onReceive((kind, payload) => { ... }) // ← a frontend → us
 app.send("hello", { n: 1 }) // → all of this app's open frontends
 ```
 
-`dimContext()` is what Desktop passes the app's server (`--dimos-dir`, `--dimos-python`, `--zenoh-web-url`,
-`--desktop-url`, or the `DIMOS_DIR`, `DIMOS_PYTHON`, `ZENOH_WEB_URL`, `DIMOS_DESKTOP_URL` environment):
+`dimContext()` is what Desktop passes the app's server in the `DIMOS_APP` environment variable, a JSON object (Desktop's
+docs/apps.md; `readDimosApp()` from `app_env.js` reads it outside a backend too). On a Desktop from before 2026-10-05
+the same fields are read from its older flags and env vars (`--desktop-url`, `DIMOS_APP_NAME`, ...).
 
-- `dimosDir` — the dimos checkout Desktop uses; `python` — its venv's python
-- `zenohWebUrl` — Desktop's [zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge
-- `desktopUrl` — Desktop's HTTP base URL
+- `name` — the name the app is installed under; `path` — where Desktop serves it (`/apps/<name>/`); `url` — that path on
+  Desktop's loopback origin
+- `dataDir` — the app's own writable folder
+- `dimosDir` — the dimos checkout Desktop uses; `dimosPython` (also `python`) — its venv's python
+- `zenohWebUrl` — Desktop's [zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge; `zenohConnect` — the zenoh
+  endpoint dimos modules are on
+- `desktopUrl` — Desktop's HTTP base URL; `recordingsDir` — the shared recordings folder
 
 Both halves carry a `VERSION`; the frontend sends it on connect so the backend can warn when they differ.
 `sendBytes(kind, bytes, meta)` on either side sends bytes in a binary frame (no base64); the other side's handlers get
@@ -56,7 +61,7 @@ their own server (Live Viewer, Map Builder) implement the same route themselves.
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -70,12 +75,12 @@ is throttled (the same message at most once per 10 s, at most 20 a minute). Desk
 [desktop_events.js](desktop_events.js): `onDesktopEvent(type | "*", callback)` subscribes to Desktop's push stream
 (`GET /api/events`, SSE, one JSON object per event, typed: `apps`, `endpoints`, `blueprints`, `runs`, `notification`,
 `ui-settings`, …) and returns an unsubscribe function. In a page it's an `EventSource` on the same origin; in a Deno
-backend it reads the stream from the Desktop URL the app server was given (`--desktop-url` / `DIMOS_DESKTOP_URL`) and
-reconnects with backoff. One connection is shared by all subscriptions.
+backend it reads the stream from the Desktop URL the app server was given (`DIMOS_APP`'s `desktopUrl`) and reconnects
+with backoff. One connection is shared by all subscriptions.
 
 ```js
 // a Deno backend that hears when any app's endpoints change ({type:"endpoints", app, added, removed})
-import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/desktop_events.js"
+import { onDesktopEvent } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/desktop_events.js"
 
 const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
     console.log(`${app}: +${added.length} -${removed.length} endpoints`)
@@ -89,7 +94,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -134,18 +139,18 @@ Apps vendor these files (no build step at runtime, works offline). [vendor.js](v
 app already has from the version in its URL, which is how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.5/vendor.js frontend/src/dim-app
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.9.6/vendor.js frontend/src/dim-app
 ```
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/theme.css">
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/theme.css">
 import {
     initTheme,
     mountThemeToggle,
     onThemeChange,
     themeColors,
     toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.5/theme.js"
+} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.9.6/theme.js"
 
 initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
 mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
@@ -195,7 +200,8 @@ Desktop builds every app with `nix build .#dimosApp`. This repo's flake makes th
 Pin the flake input and the import URLs to the same version. To run an app's server by hand:
 
 ```sh
-deno run -A serve.js --frontend dim/apps/my_app/frontend --backend dim/apps/my_app/main.js --socket /tmp/my-app.sock
+DIMOS_APP='{"version":1,"name":"my-app","socket":"/tmp/my-app.sock"}' \
+    deno run -A serve.js --frontend dim/apps/my_app/frontend --backend dim/apps/my_app/main.js
 ```
 
 Licensed under the Apache License, Version 2.0.

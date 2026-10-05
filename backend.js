@@ -24,18 +24,11 @@
 // `dimApp.ui.*` (toast, confirm, ask, askBoolean) and `dimApp.sudo.run(argv)` are shown by the app's open frontends.
 
 import { packBinary, unpackBinary } from "./binary.js"
+import { readDimosApp } from "./app_env.js"
 
-export const VERSION = "0.9.5"
+export const VERSION = "0.9.6"
 
 const DIM = Symbol.for("dim.app")
-
-function readEnv(name) {
-    try {
-        return globalThis.Deno?.env.get(name)
-    } catch {
-        return undefined
-    }
-}
 
 /** The single shared registry (created once, shared across every importer). */
 export function registry() {
@@ -47,16 +40,15 @@ export function registry() {
 }
 
 /**
- * `{ dimosDir, python, zenohWebUrl, desktopUrl }`: what Desktop passes the app's server (serve.js reads its flags),
- * else the environment Desktop sets (DIMOS_DIR, DIMOS_PYTHON, ZENOH_WEB_URL, DIMOS_DESKTOP_URL).
+ * What Desktop passed the app's server: the DIMOS_APP JSON (`{ name, socket, url, path, dataDir, desktopUrl,
+ * zenohWebUrl, zenohConnect, dimosDir, dimosPython, recordingsDir, ... }`, else read from older Desktops' flags/env),
+ * plus `python` (dimosPython's old name).
  */
 export function dimContext() {
     const reg = registry()
-    reg.ctx ??= {
-        dimosDir: readEnv("DIMOS_DIR") ?? null,
-        python: readEnv("DIMOS_PYTHON") ?? null,
-        zenohWebUrl: readEnv("ZENOH_WEB_URL") ?? null,
-        desktopUrl: readEnv("DIMOS_DESKTOP_URL") ?? null,
+    if (!reg.ctx) {
+        const app = readDimosApp()
+        reg.ctx = { ...app, python: app.dimosPython }
     }
     return reg.ctx
 }
@@ -75,7 +67,7 @@ export class DimAppBackend {
      */
     constructor(opts = {}) {
         const reg = registry()
-        this.app = opts.app || reg.current || readEnv("DIMOS_APP_NAME") || "app"
+        this.app = opts.app || reg.current || dimContext().name || "app"
         this._handlers = []
         this.onRequest = null // the loader may also assign module.receiveRequest
         this._closed = false

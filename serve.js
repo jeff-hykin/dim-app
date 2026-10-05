@@ -2,8 +2,10 @@
 // in this process, and bridges the two over a websocket at `/dim-app/ws`. `/api/events/ws` carries the backend's
 // publishEvent() JSON to pages (the standard backend → page channel, see events.js). An app's flake wraps it as
 // bin/dimos-app-server:
-//     deno run -A serve.js --frontend <dir> [--backend <main.js>] --socket <path> [Desktop's other flags]
+//     deno run -A serve.js --frontend <dir> [--backend <main.js>]
+// Desktop passes the socket and the rest in the DIMOS_APP env var (older Desktops: as flags; see app_env.js).
 import { serveDir } from "jsr:@std/http@1/file-server"
+import { readDimosApp } from "./app_env.js"
 
 function flag(name) {
     const index = Deno.args.indexOf(`--${name}`)
@@ -12,9 +14,10 @@ function flag(name) {
 
 const frontend = flag("frontend")
 const backend = flag("backend")
-const socket = flag("socket")
+const dimosApp = readDimosApp(Deno.args)
+const socket = dimosApp.socket
 if (!frontend || !socket) {
-    console.error("usage: serve.js --frontend <dir> [--backend <main.js>] --socket <path>")
+    console.error(`usage: DIMOS_APP='{"socket":"<path>",...}' serve.js --frontend <dir> [--backend <main.js>]`)
     Deno.exit(2)
 }
 
@@ -114,14 +117,9 @@ async function sudoRun({ args, title, reason }) {
         : await runSudo(args, password)
 }
 
-const name = Deno.env.get("DIMOS_APP_NAME") || "app"
-const env = (key) => Deno.env.get(key) ?? null
-const ctx = {
-    dimosDir: flag("dimos-dir") ?? env("DIMOS_DIR"),
-    python: flag("dimos-python") ?? env("DIMOS_PYTHON"),
-    zenohWebUrl: flag("zenoh-web-url") ?? env("ZENOH_WEB_URL"),
-    desktopUrl: flag("desktop-url") ?? env("DIMOS_DESKTOP_URL"),
-}
+const name = dimosApp.name || "app"
+// everything in DIMOS_APP, plus `python` (dimosPython's old name)
+const ctx = { ...dimosApp, python: dimosApp.dimosPython }
 // seeded before the import, so `new DimAppBackend()` at main.js's top level finds its name, context and host
 const registry = { version: "serve", current: name, registered: new Map(), ctx, host: { send: broadcast, publish, ui, sudoRun } }
 globalThis[Symbol.for("dim.app")] = registry
