@@ -1,0 +1,8 @@
+{
+    "fmt": {
+        "indentWidth": 4,
+        "semiColons": false,
+        "lineWidth": 120,
+        "exclude": ["zenoh_web_client.js", "*.md", "fonts"]
+    }
+}

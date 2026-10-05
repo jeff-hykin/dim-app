@@ -1,0 +1,17 @@
+# dim-app's files are vendored verbatim into apps whose CI runs `deno fmt --check` with this same config (4-space indent,
+# no semicolons, 120 columns), so a file that isn't formatted here breaks every app that vendors it.
+name: ci
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: denoland/setup-deno@v2
+              with:
+                  deno-version: v2.5.0 # the formatter changes between releases: the apps pin this one too
+            - run: deno fmt --check
+            - run: deno test -A
