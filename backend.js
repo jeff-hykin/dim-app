@@ -27,7 +27,7 @@ import { packBinary, unpackBinary } from "./binary.js"
 import { readDimosApp } from "./app_env.js"
 import { publishFrontend } from "./frontend_publish.js"
 
-export const VERSION = "0.10.1"
+export const VERSION = "0.10.2"
 
 const DIM = Symbol.for("dim.app")
 
