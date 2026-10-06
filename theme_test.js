@@ -1,37 +1,43 @@
 // deno test theme_test.js
 import { assertEquals } from "jsr:@std/assert@1"
 
-// a page at /apps/my-app/ on Desktop's origin: a fake document, localStorage and Desktop's /api/ui-settings/themes
+// a page at /apps/my-app/ on Desktop's origin: a fake document and localStorage
 const storage = new Map()
+const fakeStyle = () => ({
+    props: {},
+    setProperty(k, v) {
+        this.props[k] = v
+    },
+    removeProperty(k) {
+        delete this.props[k]
+    },
+    getPropertyValue(k) {
+        return this.props[k] ?? ""
+    },
+})
+const attributes = new Set()
 const root = {
     dataset: {},
-    style: {
-        props: {},
-        setProperty(k, v) {
-            this.props[k] = v
-        },
-        removeProperty(k) {
-            delete this.props[k]
-        },
-        getPropertyValue(k) {
-            return this.props[k] ?? ""
-        },
+    style: fakeStyle(),
+    toggleAttribute(name, on) {
+        on ? attributes.add(name) : attributes.delete(name)
+    },
+    removeAttribute(name) {
+        attributes.delete(name)
     },
 }
 const classes = new Set()
-const fetched = []
-let desktop = null
+const body = {
+    classList: { add: (c) => classes.add(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) },
+    style: fakeStyle(),
+}
 Object.assign(globalThis, {
     document: {
         documentElement: root,
-        body: { classList: { add: (c) => classes.add(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) } },
+        body,
         fonts: { load: () => Promise.resolve(), ready: Promise.resolve() },
     },
     parent: globalThis,
-    fetch: (url) => {
-        fetched.push(String(url))
-        return Promise.resolve(desktop ? new Response(JSON.stringify(desktop)) : new Response("", { status: 503 }))
-    },
 })
 Object.defineProperty(globalThis, "localStorage", {
     value: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
@@ -42,28 +48,45 @@ Object.defineProperty(globalThis, "location", {
     configurable: true,
 })
 
-const { initTheme, onThemeChange, themeName, desktopSkin, corners } = await import("./theme.js")
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+const { initTheme, onThemeChange, themeName, desktopSkin, desktopTheme, corners } = await import("./theme.js")
 const desktopSaves = (key, value) => {
     storage.set(key, value)
     dispatchEvent(Object.assign(new Event("storage"), { key }))
 }
+const publish = (skin, light, tokens) => desktopSaves("portal.themeTokens", JSON.stringify({ skin, light, tokens }))
 
-Deno.test("follows Desktop: Portal with nothing to go on, then its saved theme and corners, live", async () => {
+Deno.test("nothing published: the bundled Portal, no tokens inline", () => {
+    assertEquals(initTheme(), "portal")
+    assertEquals([root.dataset.dimTheme, classes.has("dark"), root.dataset.dimTokens], ["portal", true, undefined])
+    assertEquals(body.style.props, {})
+    assertEquals(desktopTheme(), null)
+})
+
+Deno.test("Desktop's published tokens go inline on <body>, exactly, and follow every change live", () => {
     const seen = []
     onThemeChange((detail) => seen.push(detail))
-    assertEquals(initTheme(), "portal")
-    assertEquals(fetched, ["http://127.0.0.1:5555/api/ui-settings/themes"])
-    await tick()
-    assertEquals([root.dataset.dimTheme, classes.has("dark"), root.dataset.corners], ["portal", true, undefined])
+    const vibeslop = { "--bg": "#171717", "--card": "#212121", "--radius-lg": "16px", "--sans": "Inter" }
+    publish("vibeslop", false, vibeslop)
+    assertEquals(body.style.props, vibeslop)
+    assertEquals([themeName(), desktopSkin(), classes.has("dark")], ["portal", "vibeslop", true])
+    assertEquals([root.dataset.dimTokens, attributes.has("data-dim-square"), root.style.props.background], [
+        "vibeslop",
+        false,
+        "#171717",
+    ])
+    assertEquals(seen.at(-1).tokens, vibeslop)
 
-    desktopSaves("portal.theme", "research")
+    // a light skin: the light structural rules, and the last skin's tokens are all replaced
+    publish("research", true, { "--bg": "#f5f4ef", "--radius-lg": "10px" })
+    assertEquals(body.style.props, { "--bg": "#f5f4ef", "--radius-lg": "10px" })
     assertEquals([themeName(), root.dataset.dimTheme, classes.has("dark")], ["research", "research", false])
-    assertEquals(seen.at(-1), { dark: false, theme: "research", skin: "research", corners: "theme" })
 
-    desktopSaves("portal.theme", "vibeslop")
-    assertEquals([themeName(), desktopSkin()], ["portal", "vibeslop"])
+    // a square skin squares every corner (theme.css's html[data-dim-square] rule)
+    publish("portal", false, { "--bg": "#05070d", "--radius-lg": "0px" })
+    assertEquals([themeName(), attributes.has("data-dim-square")], ["portal", true])
+})
 
+Deno.test("Desktop's corners follow too", () => {
     desktopSaves("portal.corners", "rounded")
     assertEquals([corners(), root.dataset.corners, root.style.props["--dim-corner-radius"]], [
         "rounded",
@@ -74,18 +97,7 @@ Deno.test("follows Desktop: Portal with nothing to go on, then its saved theme a
     assertEquals([root.dataset.corners, root.style.props["--dim-corner-radius"]], [undefined, undefined])
 })
 
-Deno.test("Desktop's answer says which skins are light, and is the theme when this browser saved none", async () => {
-    storage.clear()
-    desktop = {
-        themes: [{ id: "portal", light: false }, { id: "paper", light: true }],
-        current: "paper",
-        corners: "sharp",
-    }
-    // (initTheme asks once; ask again the way a fresh page would)
-    const fresh = await import("./theme.js?fresh")
-    fresh.initTheme()
-    await tick()
-    await tick()
-    assertEquals([fresh.themeName(), fresh.desktopSkin(), fresh.corners()], ["research", "paper", "sharp"])
-    assertEquals(root.dataset.corners, "sharp")
+Deno.test("unreadable tokens count as none: the bundled Portal again", () => {
+    desktopSaves("portal.themeTokens", "{not json")
+    assertEquals([desktopTheme(), body.style.props, root.dataset.dimTokens], [null, {}, undefined])
 })
