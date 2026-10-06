@@ -10,7 +10,7 @@ process, and bridges the two over a websocket at `dim-app/ws`, relative to the a
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
@@ -179,7 +179,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -212,7 +212,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -237,7 +237,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -262,9 +262,12 @@ void `#05070d`, ink `#ece8f0`, one accent `#7cc8ec`, square corners everywhere, 
 active things; Inter for UI, IBM Plex Mono for data, Michroma for small uppercase section heads) and **Research**
 (light: paper `#f5f4ef`, white hairline cards with a soft shadow, accent `#293ce4`, 8–14px corners and pills for chips /
 toggles / bars; Instrument Serif titles, Inter, uppercase Plex Mono micro-labels). Color is status only (`--ok`,
-`--warn`); Portal has no red, so `--danger` is the warn amber there. [theme.js](theme.js) picks one from
-`prefers-color-scheme` (dark → Portal, light → Research), or the app's own saved choice (per app, in
-`localStorage["dim-app.theme:<app>"]`); apps keep their own theme, separate from Desktop's.
+`--warn`); Portal has no red, so `--danger` is the warn amber there. [theme.js](theme.js) follows dimOS Desktop's
+theme (Settings → Appearance): a light Desktop skin is Research, any other Portal, and Desktop's corners setting
+(`html[data-corners="sharp"|"rounded"]`) comes along. Apps are served from Desktop's origin, so it reads Desktop's
+saved `localStorage["portal.theme"]` / `["portal.corners"]` and re-themes the moment Desktop changes them (the
+`storage` event), with `GET /api/ui-settings/themes` for a browser that has no saved copy; off Desktop, Portal. Apps
+have no theme switch of their own.
 
 Components: `.dim-btn` (`.primary` `.ghost` `.danger` `.sm` `.lg` `.icon` `.round`, `.on` / `aria-pressed`),
 `.dim-input` / `.dim-select` / `.dim-textarea`, `.dim-ask` (input + send button), `.dim-check` (`.box` / `.ring`),
@@ -286,26 +289,18 @@ version in its URL, which is
 how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.13.1/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.14.0/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
-then replaced in place): the theme's page color (Portal #05070d, Research #f5f4ef, from `prefers-color-scheme` or the
-app's saved choice) before any CSS or JS loads, so an app never flashes white while it loads. `initTheme()` also posts
+then replaced in place): the theme's page color (Portal #05070d, Research #f5f4ef, from Desktop's saved theme) before any CSS or JS loads, so an app never flashes white while it loads. `initTheme()` also posts
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/theme.css">
-import {
-    initTheme,
-    mountThemeToggle,
-    onThemeChange,
-    themeColors,
-    toggleTheme,
-} from "https://esm.sh/gh/jeff-hykin/dim-app@v0.13.1/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/theme.js"
 
-initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research">
-mountThemeToggle(document.querySelector("header")) // optional "Portal / Research" pill
+initTheme() // <body class="science [dark]">, <html data-dim-theme="portal|research" data-corners>, following Desktop
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
 ```
 
