@@ -1,8 +1,14 @@
 // deno test theme_test.js
 import { assertEquals } from "jsr:@std/assert@1"
 
-// a page at /apps/my-app/ on Desktop's origin: a fake document and localStorage
+// a page at /apps/my-app/ on Desktop's origin: a fake document (its computed style is what Desktop's /theme.css gives
+// the current html[data-skin]), and localStorage
 const storage = new Map()
+const SKINS = {
+    portal: { colorScheme: "dark", "--radius-lg": "0px" },
+    vibeslop: { colorScheme: "dark", "--radius-lg": "16px" },
+    research: { colorScheme: "light", "--radius-lg": "10px" },
+}
 const fakeStyle = () => ({
     props: {},
     setProperty(k, v) {
@@ -22,20 +28,22 @@ const root = {
     toggleAttribute(name, on) {
         on ? attributes.add(name) : attributes.delete(name)
     },
-    removeAttribute(name) {
-        attributes.delete(name)
-    },
 }
 const classes = new Set()
-const body = {
-    classList: { add: (c) => classes.add(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) },
-    style: fakeStyle(),
-}
+const head = []
 Object.assign(globalThis, {
     document: {
         documentElement: root,
-        body,
+        head: { prepend: (node) => head.unshift(node) },
+        body: { classList: { add: (c) => classes.add(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) } },
         fonts: { load: () => Promise.resolve(), ready: Promise.resolve() },
+        querySelector: (selector) =>
+            head.find((node) => selector === "link[data-dim-desktop-theme]" && node.rel) ?? null,
+        createElement: () => ({ dataset: {}, addEventListener() {} }),
+    },
+    getComputedStyle: () => {
+        const skin = SKINS[root.dataset.skin] ?? SKINS.portal
+        return { colorScheme: skin.colorScheme, getPropertyValue: (name) => skin[name] ?? "" }
     },
     parent: globalThis,
 })
@@ -48,42 +56,34 @@ Object.defineProperty(globalThis, "location", {
     configurable: true,
 })
 
-const { initTheme, onThemeChange, themeName, desktopSkin, desktopTheme, corners } = await import("./theme.js")
+const { initTheme, onThemeChange, themeName, desktopSkin, corners } = await import("./theme.js")
 const desktopSaves = (key, value) => {
     storage.set(key, value)
     dispatchEvent(Object.assign(new Event("storage"), { key }))
 }
-const publish = (skin, light, tokens) => desktopSaves("portal.themeTokens", JSON.stringify({ skin, light, tokens }))
 
-Deno.test("nothing published: the bundled Portal, no tokens inline", () => {
+Deno.test("links Desktop's /theme.css once, and shows Portal with nothing saved", () => {
     assertEquals(initTheme(), "portal")
-    assertEquals([root.dataset.dimTheme, classes.has("dark"), root.dataset.dimTokens], ["portal", true, undefined])
-    assertEquals(body.style.props, {})
-    assertEquals(desktopTheme(), null)
+    initTheme()
+    assertEquals(head.map((link) => link.href), ["/theme.css"])
+    assertEquals([root.dataset.skin, root.dataset.dimTheme, classes.has("dark")], ["portal", "portal", true])
+    assertEquals(attributes.has("data-dim-square"), true)
 })
 
-Deno.test("Desktop's published tokens go inline on <body>, exactly, and follow every change live", () => {
+Deno.test("follows the skin Desktop saves, live: html[data-skin], and light/dark from the skin's color-scheme", () => {
     const seen = []
     onThemeChange((detail) => seen.push(detail))
-    const vibeslop = { "--bg": "#171717", "--card": "#212121", "--radius-lg": "16px", "--sans": "Inter" }
-    publish("vibeslop", false, vibeslop)
-    assertEquals(body.style.props, vibeslop)
-    assertEquals([themeName(), desktopSkin(), classes.has("dark")], ["portal", "vibeslop", true])
-    assertEquals([root.dataset.dimTokens, attributes.has("data-dim-square"), root.style.props.background], [
+    desktopSaves("portal.theme", "vibeslop")
+    assertEquals([root.dataset.skin, desktopSkin(), themeName(), classes.has("dark")], [
         "vibeslop",
-        false,
-        "#171717",
+        "vibeslop",
+        "portal",
+        true,
     ])
-    assertEquals(seen.at(-1).tokens, vibeslop)
-
-    // a light skin: the light structural rules, and the last skin's tokens are all replaced
-    publish("research", true, { "--bg": "#f5f4ef", "--radius-lg": "10px" })
-    assertEquals(body.style.props, { "--bg": "#f5f4ef", "--radius-lg": "10px" })
+    assertEquals(attributes.has("data-dim-square"), false)
+    desktopSaves("portal.theme", "research")
     assertEquals([themeName(), root.dataset.dimTheme, classes.has("dark")], ["research", "research", false])
-
-    // a square skin squares every corner (theme.css's html[data-dim-square] rule)
-    publish("portal", false, { "--bg": "#05070d", "--radius-lg": "0px" })
-    assertEquals([themeName(), attributes.has("data-dim-square")], ["portal", true])
+    assertEquals(seen.at(-1), { dark: false, theme: "research", skin: "research", corners: "theme" })
 })
 
 Deno.test("Desktop's corners follow too", () => {
@@ -95,9 +95,4 @@ Deno.test("Desktop's corners follow too", () => {
     ])
     desktopSaves("portal.corners", "theme")
     assertEquals([root.dataset.corners, root.style.props["--dim-corner-radius"]], [undefined, undefined])
-})
-
-Deno.test("unreadable tokens count as none: the bundled Portal again", () => {
-    desktopSaves("portal.themeTokens", "{not json")
-    assertEquals([desktopTheme(), body.style.props, root.dataset.dimTokens], [null, {}, undefined])
 })

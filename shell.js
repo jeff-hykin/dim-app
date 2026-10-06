@@ -2,7 +2,7 @@
 // shows the commands over the app and nothing runs until the user presses Run; they run in one terminal, so sudo asks
 // for the password once; when one fails, the user or Desktop's agent fixes it in that terminal and retries it.
 //
-//     import { runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/shell.js"
+//     import { runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/shell.js"
 //     const result = await runShell({
 //         title: "Fix LAN discovery",
 //         message: "A VPN took the route the Go2 probe needs.",

@@ -10,7 +10,7 @@ process, and bridges the two over a websocket at `dim-app/ws`, relative to the a
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +20,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
@@ -179,7 +179,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -212,7 +212,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -237,7 +237,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -255,20 +255,19 @@ const one = await runCommand("id -u", { title: "Who am I", needsStdout: true }) 
 a command always runs again after a fix, so its stdout is the real one. A Deno backend passes Desktop's URL and its own
 name: `runShell({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
 
-## Theme: Desktop's tokens (Portal and Research bundled)
+## Theme: Desktop's /theme.css
 
-[theme.css](theme.css) is the shared component layer. Every color, font, radius, shadow and blur in it is a variable of
-dimOS Desktop's theme contract (`--bg --fg --muted-fg --primary --primary-fg --ok --warn --danger --info --surface
---raised --input-bg --hover --sel --border --border-strong --hair --radius --radius-sm --radius-lg --radius-xl
---radius-pill --shadow --shadow-lg --blur --sans --mono --display --label-case --track-label`, and the rest of the names
-below). Inside Desktop, [theme.js](theme.js) applies the exact values Desktop's shell published for its active skin
-(`localStorage["portal.themeTokens"]`, inline on `<body>`), so an app looks like the Desktop around it in every skin —
-Vibeslop, Hackerman, Research, … — and re-themes the moment Desktop changes skin or corners (the `storage` event); the
-skin's light/dark picks the structural rules (`body.science.dark`). Off Desktop, or before Desktop ever ran in this
-browser, the bundled defaults show: **Portal** (dark: void `#05070d`, ink `#ece8f0`, one accent `#7cc8ec`, square
-corners, 1px hairlines; Inter for UI, IBM Plex Mono for data, Michroma for small uppercase section heads), with
-**Research** (light: paper `#f5f4ef`, white hairline cards, accent `#293ce4`, 8–14px corners) as the light rules'
-defaults. Apps have no theme switch of their own.
+All theme values live in dimOS Desktop: it serves every skin's tokens (the theme contract: `--bg --fg --muted-fg
+--primary --primary-fg --ok --warn --danger --info --surface --raised --input-bg --hover --sel --border --border-strong
+--hair --radius --radius-sm --radius-lg --radius-xl --radius-pill --shadow --shadow-lg --blur --sans --mono --display
+--label-case --track-label`, and the rest of the names below) as `/theme.css`, Portal as `:root` and each skin as
+`html[data-skin="<id>"]`. [theme.css](theme.css) here is only the components, written against those tokens.
+[theme.js](theme.js) links Desktop's stylesheet (an app at `/apps/<name>/` reaches it as `../../theme.css`) and sets
+`html[data-skin]` and `html[data-corners]` from what Desktop saved (`localStorage["portal.theme"]` /
+`["portal.corners"]`, Desktop's origin), so an app looks like the Desktop around it in every skin — Vibeslop, Hackerman,
+Research, … — and re-themes the moment Desktop changes skin or corners (the `storage` event); the skin's color-scheme
+picks the light or dark structural rules (`body.science.dark`). Off Desktop, theme.css's one bundled fallback: Portal's
+tokens. Apps have no theme switch of their own.
 
 Components: `.dim-btn` (`.primary` `.ghost` `.danger` `.sm` `.lg` `.icon` `.round`, `.on` / `aria-pressed`),
 `.dim-input` / `.dim-select` / `.dim-textarea`, `.dim-ask` (input + send button), `.dim-check` (`.box` / `.ring`),
@@ -290,19 +289,19 @@ version in its URL, which is
 how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.15.0/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.16.0/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
-then replaced in place): the page color (Desktop's published `--bg`, else Portal's #05070d) before any CSS or JS loads,
-so an app never flashes white while it loads. `initTheme()` also posts
+then replaced in place): Desktop's `/theme.css` and its saved skin before any CSS or JS loads (off Desktop, Portal's page
+color), so an app's first frame is already in Desktop's look. `initTheme()` also posts
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.15.0/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/theme.js"
 
-initTheme() // Desktop's tokens on <body class="science [dark]">, <html data-dim-theme="portal|research" data-corners>
+initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
 ```
 
