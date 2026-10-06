@@ -13,7 +13,8 @@
 </style>
 <script>
     try {
-        if (["research", "vibeslop-light", "solarpunk"].includes(localStorage.getItem("portal.theme"))) {
+        const skin = localStorage.getItem("portal.theme")
+        if (["research", "vibeslop-light", "solarpunk"].includes(skin)) {
             document.documentElement.dataset.dimFirstPaint = "light"
         }
     } catch {

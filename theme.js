@@ -1,7 +1,7 @@
 // dim-app theme: the app follows dimOS Desktop's theme (Settings → Appearance), and keeps following it.
 //
 //     import "./theme.css"   // (or <link rel="stylesheet" href=".../theme.css">)
-//     import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.0/theme.js"
+//     import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.14.1/theme.js"
 //     initTheme()                                   // body.science [+ .dark], html[data-dim-theme], html[data-corners]
 //     onThemeChange(({ dark }) => renderer.setClearColor(themeColors().sceneBg))
 //     .drive-bar { bottom: calc(12px + var(--dim-inset-bottom)) }   // initTheme() also keeps --dim-inset-* current
