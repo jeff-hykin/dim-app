@@ -116,7 +116,9 @@ while (queue.length) {
     written.add(path)
     console.log(`${path} ← ${source.href}`)
     if (path.endsWith(".js")) {
-        for (const [, dependency] of text.matchAll(/(?:from|import\()\s*"(\.\/[\w./-]+\.js)"/g)) {
+        // the usage examples in a file's comments ("./dim-app/source/zenoh.js") aren't its imports
+        const code = text.replace(/^\s*\/\/.*$/gm, "")
+        for (const [, dependency] of code.matchAll(/(?:from|import\()\s*"(\.\/[\w./-]+\.js)"/g)) {
             const dependencyPath = resolve(dependency, path)
             queue.push(dependencyPath)
             if (wantTypes) {

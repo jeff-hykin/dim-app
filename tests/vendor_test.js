@@ -3,12 +3,13 @@ import { assert, assertEquals } from "jsr:@std/assert@1"
 
 const vendor = new URL("../tools/vendor.js", import.meta.url).pathname
 const run = async (folder) => {
-    const { code, stderr } = await new Deno.Command(Deno.execPath(), {
+    const { code, stdout, stderr } = await new Deno.Command(Deno.execPath(), {
         args: ["run", "-A", "--no-lock", vendor, folder],
-        stdout: "null",
+        stdout: "piped",
         stderr: "piped",
     }).output()
     assertEquals(code, 0, new TextDecoder().decode(stderr))
+    return new TextDecoder().decode(stdout)
 }
 const exists = (path) => Deno.stat(path).then(() => true, () => false)
 
@@ -42,6 +43,19 @@ Deno.test("vendor.js: a pre-0.18 flat folder moves into source/ (with fonts); an
         assert((await Array.fromAsync(Deno.readDir(`${folder}/source/fonts`))).length > 0, "theme.css's fonts")
         assert(!(await exists(`${folder}/zenoh.js`)) && !(await exists(`${folder}/fonts`)))
         assertEquals(await Deno.readTextFile(`${folder}/my_own.js`), "old")
+    } finally {
+        await Deno.remove(folder, { recursive: true })
+    }
+})
+
+Deno.test("vendor.js: the import examples in a file's comments aren't fetched", async () => {
+    const folder = await Deno.makeTempDir()
+    try {
+        await Deno.mkdir(`${folder}/source`)
+        await Deno.writeTextFile(`${folder}/source/dim_app.js`, "")
+        const out = await run(folder)
+        assert(await exists(`${folder}/source/zenoh_gateway_client.js`), "a real dynamic import still comes along")
+        assert(!out.includes("skip"), out)
     } finally {
         await Deno.remove(folder, { recursive: true })
     }
