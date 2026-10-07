@@ -6,7 +6,6 @@ export const INFO = {
     apps: "dimos-desktop/test-7341/apps",
     zenohPrefix: "dimos-desktop/test-7341/apps/my-app",
     zenohGatewayUrl: "/zenoh-gateway",
-    zenohWebUrl: "/zenoh-web",
     client: "https://example.invalid/zenoh_gateway.ts",
     up: true,
 }

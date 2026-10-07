@@ -29,15 +29,14 @@ app.send("hello", { n: 1 }) // → all of this app's open frontends
 ```
 
 `dimContext()` is what Desktop passes the app's server in the `DIMOS_APP` environment variable, a JSON object (Desktop's
-docs/apps.md; `readDimosApp()` from `app_env.js` reads it outside a backend too). On a Desktop from before 2026-10-05
-the same fields are read from its older flags and env vars (`--desktop-url`, `DIMOS_APP_NAME`, ...).
+docs/apps.md; `readDimosApp()` from `app_env.js` reads it outside a backend too). It is the whole interface: Desktop
+passes no flags or other variables.
 
 - `name` — the name the app is installed under; `path` — where Desktop serves it (`/apps/<name>/`); `url` — that path on
   Desktop's loopback origin
 - `dataDir` — the app's own writable folder
 - `dimosDir` — the dimos checkout Desktop uses; `dimosPython` (also `python`) — its venv's python
-- `zenohGatewayUrl` — Desktop's [zenoh-gateway](https://github.com/jeff-hykin/zenoh-gateway) (formerly zenoh-web;
-  `zenohWebUrl`, deprecated, is it at its old path); `zenohConnect` — the zenoh
+- `zenohGatewayUrl` — Desktop's [zenoh-gateway](https://github.com/jeff-hykin/zenoh-gateway) ; `zenohConnect` — the zenoh
   endpoint dimos modules are on
 - `desktopUrl` — Desktop's HTTP base URL; `recordingsDir` — the shared recordings folder
 

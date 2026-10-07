@@ -3,7 +3,7 @@
 // backend's publishEvent() goes to pages over zenoh through Desktop's relay (frontend_publish.js, events.js). An app's
 // flake wraps it as bin/dimos-app-server:
 //     deno run -A serve.js --frontend <dir> [--backend <main.js>]
-// Desktop passes the socket and the rest in the DIMOS_APP env var (older Desktops: as flags; see app_env.js).
+// Desktop passes the socket and the rest in the DIMOS_APP env var (app_env.js); the flags are the flake wrapper's.
 import { serveDir } from "jsr:@std/http@1/file-server"
 import { readDimosApp } from "./app_env.js"
 
@@ -14,7 +14,7 @@ function flag(name) {
 
 const frontend = flag("frontend")
 const backend = flag("backend")
-const dimosApp = readDimosApp(Deno.args)
+const dimosApp = readDimosApp()
 const socket = dimosApp.socket
 if (!frontend || !socket) {
     console.error(`usage: DIMOS_APP='{"socket":"<path>",...}' serve.js --frontend <dir> [--backend <main.js>]`)

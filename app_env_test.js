@@ -1,70 +1,41 @@
 import { assertEquals } from "jsr:@std/assert@1"
 import { readDimosApp } from "./app_env.js"
 
-const old = [
-    "DIMOS_APP",
-    "DIMOS_APP_NAME",
-    "DIMOS_APP_SOCKET",
-    "DIMOS_APP_DATA",
-    "DIMOS_DESKTOP_URL",
-    "ZENOH_WEB_URL",
-]
-
-function withEnv(env, fn) {
-    for (const key of old) {
-        Deno.env.delete(key)
-    }
-    for (const [key, value] of Object.entries(env)) {
-        Deno.env.set(key, value)
+function withDimosApp(value, fn) {
+    if (value === undefined) {
+        Deno.env.delete("DIMOS_APP")
+    } else {
+        Deno.env.set("DIMOS_APP", value)
     }
     try {
         return fn()
     } finally {
-        for (const key of old) {
-            Deno.env.delete(key)
-        }
+        Deno.env.delete("DIMOS_APP")
     }
 }
 
-Deno.test("DIMOS_APP wins over the old flags", () => {
+Deno.test("DIMOS_APP is read as is; a field it lacks is null", () => {
     const app = {
-        version: 1,
+        version: 2,
         name: "b",
         socket: "/s/b.sock",
         url: "http://127.0.0.1:7341/apps/b/",
         path: "/apps/b/",
         dataDir: "/d/b",
         desktopUrl: "http://127.0.0.1:7341",
+        zenohGatewayUrl: "http://127.0.0.1:7341/zenoh-gateway",
+        later: "kept",
     }
-    const read = withEnv(
-        { DIMOS_APP: JSON.stringify(app) },
-        () => readDimosApp(["--socket", "/old.sock"]),
-    )
+    const read = withDimosApp(JSON.stringify(app), () => readDimosApp())
     assertEquals(read.socket, "/s/b.sock")
     assertEquals(read.url, "http://127.0.0.1:7341/apps/b/")
-    assertEquals(read.dataDir, "/d/b")
-    assertEquals(read.zenohWebUrl, null)
-    assertEquals(read.zenohGatewayUrl, null)
+    assertEquals(read.zenohGatewayUrl, "http://127.0.0.1:7341/zenoh-gateway")
+    assertEquals(read.later, "kept")
+    assertEquals(read.zenohConnect, null)
 })
 
-Deno.test("older Desktops: flags and env", () => {
-    const read = withEnv(
-        { DIMOS_APP_NAME: "a", DIMOS_APP_DATA: "/d/a" },
-        () =>
-            readDimosApp([
-                "--socket",
-                "/s/a.sock",
-                "--desktop-url",
-                "http://127.0.0.1:7341",
-                "--zenoh-connect",
-                "",
-            ]),
-    )
-    assertEquals(read.version, 0)
-    assertEquals(read.name, "a")
-    assertEquals(read.socket, "/s/a.sock")
-    assertEquals(read.path, "/apps/a/")
-    assertEquals(read.url, "http://127.0.0.1:7341/apps/a/")
-    assertEquals(read.dataDir, "/d/a")
-    assertEquals(read.zenohConnect, "")
+Deno.test("outside Desktop: every field null", () => {
+    const read = withDimosApp(undefined, () => readDimosApp())
+    assertEquals(read.socket, null)
+    assertEquals(read.desktopUrl, null)
 })
