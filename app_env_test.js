@@ -44,6 +44,7 @@ Deno.test("DIMOS_APP wins over the old flags", () => {
     assertEquals(read.url, "http://127.0.0.1:7341/apps/b/")
     assertEquals(read.dataDir, "/d/b")
     assertEquals(read.zenohWebUrl, null)
+    assertEquals(read.zenohGatewayUrl, null)
 })
 
 Deno.test("older Desktops: flags and env", () => {

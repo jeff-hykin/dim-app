@@ -10,7 +10,7 @@ process, and bridges the two over a websocket at `dim-app/ws`, relative to the a
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,10 +20,10 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/backend.js"
 
 const app = new DimAppBackend()
-const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohWebUrl, dimosDir, dimosPython, ... }
+const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohGatewayUrl, dimosDir, dimosPython, ... }
 app.onReceive((kind, payload) => { ... }) // ← a frontend → us
 app.send("hello", { n: 1 }) // → all of this app's open frontends
 ```
@@ -36,7 +36,8 @@ the same fields are read from its older flags and env vars (`--desktop-url`, `DI
   Desktop's loopback origin
 - `dataDir` — the app's own writable folder
 - `dimosDir` — the dimos checkout Desktop uses; `dimosPython` (also `python`) — its venv's python
-- `zenohWebUrl` — Desktop's [zenoh-web](https://github.com/jeff-hykin/zenoh-web) bridge; `zenohConnect` — the zenoh
+- `zenohGatewayUrl` — Desktop's [zenoh-gateway](https://github.com/jeff-hykin/zenoh-gateway) (formerly zenoh-web;
+  `zenohWebUrl`, deprecated, is it at its old path); `zenohConnect` — the zenoh
   endpoint dimos modules are on
 - `desktopUrl` — Desktop's HTTP base URL; `recordingsDir` — the shared recordings folder
 
@@ -47,10 +48,10 @@ Both halves carry a `VERSION`; the frontend sends it on connect so the backend c
 ## Backend → page: zenoh (the rule for every app)
 
 Desktop's rule (its [docs/events.md](https://github.com/dimensionalOS/dimos-desktop/blob/main/docs/events.md)):
-**backend → frontend is always zenoh**, delivered to the browser by Desktop's zenoh-web bridge, on **one** connection
+**backend → frontend is always zenoh**, delivered to the browser by Desktop's zenoh-gateway, on **one** connection
 per page; **frontend → backend is plain HTTP** (`POST`, `PUT`, …). No SSE, no websockets, no polling for changes. State
 is "snapshot + live": the page `GET`s it, then applies events (or re-`GET`s when an event says it changed), and `GET`s
-again when its zenoh-web connection comes back.
+again when its zenoh-gateway connection comes back.
 
 Keys: an app's frontend topics are `<ns>/apps/<name>/frontend/<topic…>` (`<name>` = the install name); Desktop's events
 are `<ns>/desktop/events/<type>`, its jobs `<ns>/desktop/jobs/<id>`, the dimos server's `<ns>/dimos/events/<type>`.
@@ -73,8 +74,8 @@ zenoh.subscribe("dimos/**", { delivery: "latest" }, onMessage) // any raw key, s
 ```
 
 Every subscription returns its unsubscribe. Discovery and the first connect retry with backoff (0.5 s → 10 s), after
-which the zenoh-web client reconnects by itself and re-opens the subscriptions. The client is vendored
-([zenoh_web_client.js](zenoh_web_client.js), at the commit Desktop's bridge is built from), so nothing is fetched from
+which the zenoh-gateway client reconnects by itself and re-opens the subscriptions. The client is vendored
+([zenoh_gateway_client.js](zenoh_gateway_client.js), at the commit Desktop's gateway is built from), so nothing is fetched from
 the network; an app with its own copy passes it: `getZenoh({ connect, connectOptions: { heartbeatHz: 10 } })` (the first
 call's options win, so make that call early).
 
@@ -179,7 +180,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -193,8 +194,8 @@ is throttled (the same message at most once per 10 s, at most 20 a minute). Desk
 [desktop_events.js](desktop_events.js): `onDesktopEvent(type | "*", callback)` → unsubscribe. In a page it is
 `getZenoh().subscribeDesktop(type, callback)` (`<ns>/desktop/events/<type>`: `apps`, `endpoints`, `endpoint-stats`,
 `blueprints`, `runs`, `recordings`, `notification`, `notifications`, `ui-settings`, `job`, `error`, `launcher`, …; see
-Desktop's docs/events.md for each payload), on the page's one zenoh-web connection; `onDimosEvent(type, callback)` is
-the dimos server's, and `onDesktopReconnect(callback)` says when to re-GET. In a Deno backend (no zenoh-web there) it
+Desktop's docs/events.md for each payload), on the page's one zenoh-gateway connection; `onDimosEvent(type, callback)` is
+the dimos server's, and `onDesktopReconnect(callback)` says when to re-GET. In a Deno backend (no zenoh-gateway there) it
 still reads Desktop's `GET /api/events` stream from `DIMOS_APP`'s `desktopUrl`, which Desktop keeps, deprecated, for one
 release.
 
@@ -212,7 +213,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -237,7 +238,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -282,14 +283,14 @@ square skin (panel radius 0, like Portal) also squares every corner, as Portal's
 The four faces are bundled in [fonts/](fonts) (latin subset, OFL) and declared with `font-display: block`; `initTheme()`
 starts loading all of them, and `themeFontsReady()` resolves when they are in. Nothing is fetched from the network.
 
-Apps vendor dim-app's files (no build step at runtime, works offline): `zenoh.js` needs `zenoh_web_client.js` next to
+Apps vendor dim-app's files (no build step at runtime, works offline): `zenoh.js` needs `zenoh_gateway_client.js` next to
 it, `backend_state.js` needs `zenoh.js`, `react.js` needs `backend_state.js` and `desktop.js`, `events.js` and `desktop_events.js` need
 `zenoh.js` (`shell.js` and `notify.js` stand alone). [vendor.js](vendor.js) refreshes the dim-app files an app already has (and brings any file they import) from the
 version in its URL, which is
 how an app pins a version:
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.16.0/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.17.0/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
@@ -298,8 +299,8 @@ color), so an app's first frame is already in Desktop's look. `initTheme()` also
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.16.0/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.17.0/theme.js"
 
 initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4

@@ -1,12 +1,13 @@
-// Test doubles for zenoh.js: a fake zenoh-web client and Desktop's discovery answer.
+// Test doubles for zenoh.js: a fake zenoh-gateway client and Desktop's discovery answer.
 export const INFO = {
     namespace: "dimos-desktop/test-7341",
     desktop: "dimos-desktop/test-7341/desktop",
     dimos: "dimos-desktop/test-7341/dimos",
     apps: "dimos-desktop/test-7341/apps",
     zenohPrefix: "dimos-desktop/test-7341/apps/my-app",
+    zenohGatewayUrl: "/zenoh-gateway",
     zenohWebUrl: "/zenoh-web",
-    client: "https://example.invalid/zenoh_web.ts",
+    client: "https://example.invalid/zenoh_gateway.ts",
     up: true,
 }
 

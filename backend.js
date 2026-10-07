@@ -42,7 +42,7 @@ export function registry() {
 
 /**
  * What Desktop passed the app's server: the DIMOS_APP JSON (`{ name, socket, url, path, dataDir, desktopUrl,
- * zenohWebUrl, zenohConnect, dimosDir, dimosPython, recordingsDir, ... }`, else read from older Desktops' flags/env),
+ * zenohGatewayUrl, zenohConnect, dimosDir, dimosPython, recordingsDir, ... }`, else read from older Desktops' flags/env),
  * plus `python` (dimosPython's old name).
  */
 export function dimContext() {

@@ -30,7 +30,7 @@ Deno.test("getZenoh: one shared connection, discovery with ?app, keys under the 
         await zenoh.ready
         assertEquals(fake.fetched[0], "http://h:7341/api/desktop/zenoh?app=my-app")
         assertEquals(fake.clients.length, 1)
-        assertEquals(fake.clients[0].url, "http://h:7341/zenoh-web")
+        assertEquals(fake.clients[0].url, "http://h:7341/zenoh-gateway")
         assertEquals(zenoh.namespace, INFO.namespace)
         assertEquals(zenoh.prefix, INFO.zenohPrefix)
         assertEquals(fake.clients[0].open().map((s) => [s.key, s.options.delivery]), [
