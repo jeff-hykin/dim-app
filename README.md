@@ -3,14 +3,18 @@
 The tiny SDK for [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) apps that have a Deno backend: a
 frontend and a backend that message each other, plus popups and privileged commands. No build step; import it by URL.
 
-The app's server is this repo's [serve.js](serve.js): it serves the frontend, runs the backend module in the same
+The app's server is this repo's [serve.js](source/serve.js): it serves the frontend, runs the backend module in the same
 process, and bridges the two over a websocket at `dim-app/ws`, relative to the app (the SDK's request/answer channel for
 `send`, popups and `sudo`). Pushes to pages that aren't SDK calls go over zenoh (below).
+
+Layout: [mod.js](mod.js) re-exports the whole API (`import { DimApp, initTheme } from "./dim-app/mod.js"`); the files
+are in [source/](source), their tests in [tests/](tests) (`deno test -A`), and [tools/vendor.js](tools/vendor.js)
+vendors them into an app.
 
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -20,7 +24,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohGatewayUrl, dimosDir, dimosPython, ... }
@@ -57,10 +61,10 @@ are `<ns>/desktop/events/<type>`, its jobs `<ns>/desktop/jobs/<id>`, the dimos s
 Nobody hardcodes `<ns>`: pages get it from `GET ../../api/desktop/zenoh?app=<name>`, backends from `DIMOS_APP`
 (`zenohNamespace`, `zenohPrefix`).
 
-### Page: dimos streams, decoded — [dim_app.js](dim_app.js) (start here)
+### Page: dimos streams, decoded — [dim_app.js](source/dim_app.js) (start here)
 
 ```js
-import { DimApp } from "./dim-app/dim_app.js"
+import { DimApp } from "./dim-app/source/dim_app.js"
 
 // the dimos gateway's generated codec; declare GET /msgs.js under uses: "@dimos-gateway" in dimos.yaml
 const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
@@ -76,10 +80,10 @@ the codec doesn't know arrives as raw bytes (one warning). `msgDecodeEndpoint` i
 absolute) and imported once; `app.msgs` is that module, `app.zenoh` the page's shared connection below (its `.client`
 is the zenoh-gateway client). Other options go to `getZenoh()` (e.g. `connectOptions: { heartbeatHz: 5 }` for deadmen).
 
-### Page: the one connection — [zenoh.js](zenoh.js)
+### Page: the one connection — [zenoh.js](source/zenoh.js)
 
 ```js
-import { getZenoh } from "./dim-app/zenoh.js"
+import { getZenoh } from "./dim-app/source/zenoh.js"
 
 const zenoh = getZenoh() // the page's one connection (module singleton); app name from /apps/<name>/ in the URL
 zenoh.subscribeFrontend("status", (status) => render(status)) // JSON by default; { parse: "text" | "bytes" }
@@ -93,14 +97,14 @@ zenoh.subscribe("dimos/**", { delivery: "latest" }, onMessage) // any raw key, s
 
 Every subscription returns its unsubscribe. Discovery and the first connect retry with backoff (0.5 s → 10 s), after
 which the zenoh-gateway client reconnects by itself and re-opens the subscriptions. The client is vendored
-([zenoh_gateway_client.js](zenoh_gateway_client.js), at the commit Desktop's gateway is built from), so nothing is fetched from
+([zenoh_gateway_client.js](source/zenoh_gateway_client.js), at the commit Desktop's gateway is built from), so nothing is fetched from
 the network; an app with its own copy passes it: `getZenoh({ connect, connectOptions: { heartbeatHz: 10 } })` (the first
 call's options win, so make that call early).
 
-### Page: backend state — [backend_state.js](backend_state.js), [react.js](react.js)
+### Page: backend state — [backend_state.js](source/backend_state.js), [react.js](source/react.js)
 
 ```js
-import { useBackendState } from "./dim-app/react.js"
+import { useBackendState } from "./dim-app/source/react.js"
 
 const [recordings, { loading, error, refresh }] = useBackendState("recordings") // GET api/state/recordings
 const [library] = useBackendState("api/library?sort=name") // key "library" (the path's last segment)
@@ -111,15 +115,15 @@ newer than what it has (an event without a version always counts), and re-`GET`s
 last data and sets `error`. `loading` is true until the first answer. Without React:
 `watchBackendState(source, ({ data, loading, error }) => …)` → `{ refresh, stop }`.
 
-### Page: an app's ordered event stream — [events.js](events.js)
+### Page: an app's ordered event stream — [events.js](source/events.js)
 
 `appEvents((event) => …, { onOpen, onClose })` subscribes to the frontend topic `events` (one key, reliable, so events
 arrive in the order they were published); `onOpen` runs on connect and every reconnect (re-GET there).
 
-### Backend: publishing — [frontend_publish.js](frontend_publish.js)
+### Backend: publishing — [frontend_publish.js](source/frontend_publish.js)
 
 ```js
-import { publishFrontend, stateChanged } from "./dim-app/frontend_publish.js"
+import { publishFrontend, stateChanged } from "./dim-app/source/frontend_publish.js"
 
 publishFrontend("status", { battery: 0.82 }) // POST <desktopUrl>/desktop/frontend/<name>/status
 publishFrontend("events", { type: "saved", id }) // what the page's appEvents() hears
@@ -156,10 +160,10 @@ backgrounds and 3D views can stay full-bleed:
 }
 ```
 
-**Opening other apps** — [desktop.js](desktop.js):
+**Opening other apps** — [desktop.js](source/desktop.js):
 
 ```js
-import { appInstalled, emptyState, openApp } from "./dim-app/desktop.js"
+import { appInstalled, emptyState, openApp } from "./dim-app/source/desktop.js"
 
 await openApp("launcher", { kind: "blueprint", stream: "cmd_vel" }) // the Launcher, on blueprints that drive a robot
 await openApp("dim-controller", { path: "#record" }) // an app, by install name or title, at a path inside it
@@ -189,16 +193,16 @@ view.replaceChildren(emptyState({
 }))
 ```
 
-React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` from [react.js](react.js).
+React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` from [react.js](source/react.js).
 
 ## Errors → Desktop's agent
 
-[errors.js](errors.js) sends a page's errors to Desktop's error feed (`POST /api/errors`, relative to the app:
+[errors.js](source/errors.js) sends a page's errors to Desktop's error feed (`POST /api/errors`, relative to the app:
 `../../api/errors`), where a connected agent sees them (its `recent_errors` tool; the newest unacknowledged ones are in
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -209,7 +213,7 @@ is throttled (the same message at most once per 10 s, at most 20 a minute). Desk
 
 ## Desktop events → apps
 
-[desktop_events.js](desktop_events.js): `onDesktopEvent(type | "*", callback)` → unsubscribe. In a page it is
+[desktop_events.js](source/desktop_events.js): `onDesktopEvent(type | "*", callback)` → unsubscribe. In a page it is
 `getZenoh().subscribeDesktop(type, callback)` (`<ns>/desktop/events/<type>`: `apps`, `endpoints`, `endpoint-stats`,
 `blueprints`, `runs`, `recordings`, `notification`, `notifications`, `ui-settings`, `job`, `error`, `launcher`, …; see
 Desktop's docs/events.md for each payload), on the page's one zenoh-gateway connection; `onDimosEvent(type, callback)` is
@@ -218,7 +222,7 @@ still reads Desktop's `GET /api/events` stream from `DIMOS_APP`'s `desktopUrl`, 
 release.
 
 ```js
-import { onDesktopEvent } from "./dim-app/desktop_events.js"
+import { onDesktopEvent } from "./dim-app/source/desktop_events.js"
 
 const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
     console.log(`${app}: +${added.length} -${removed.length} endpoints`)
@@ -227,11 +231,11 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 
 ## Notifications → Desktop's notification center
 
-[notify.js](notify.js) posts to Desktop's `POST /api/notifications` (an absolute path: apps share Desktop's origin under
+[notify.js](source/notify.js) posts to Desktop's `POST /api/notifications` (an absolute path: apps share Desktop's origin under
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -250,13 +254,13 @@ icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { ori
 
 ## Shell commands (sudo too) → Desktop
 
-[shell.js](shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
+[shell.js](source/shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
 shows them over the app with a note for each, nothing runs until the user presses Run, they run in one terminal (sudo
 asks for the password once), and when one fails the user or Desktop's agent fixes it in that terminal and retries it.
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -280,8 +284,8 @@ All theme values live in dimOS Desktop: it serves every skin's tokens (the theme
 --primary --primary-fg --ok --warn --danger --info --surface --raised --input-bg --hover --sel --border --border-strong
 --hair --radius --radius-sm --radius-lg --radius-xl --radius-pill --shadow --shadow-lg --blur --sans --mono --display
 --label-case --track-label`, and the rest of the names below) as `/theme.css`, Portal as `:root` and each skin as
-`html[data-skin="<id>"]`. [theme.css](theme.css) here is only the components, written against those tokens.
-[theme.js](theme.js) links Desktop's stylesheet (an app at `/apps/<name>/` reaches it as `../../theme.css`) and sets
+`html[data-skin="<id>"]`. [theme.css](source/theme.css) here is only the components, written against those tokens.
+[theme.js](source/theme.js) links Desktop's stylesheet (an app at `/apps/<name>/` reaches it as `../../theme.css`) and sets
 `html[data-skin]` and `html[data-corners]` from what Desktop saved (`localStorage["portal.theme"]` /
 `["portal.corners"]`, Desktop's origin), so an app looks like the Desktop around it in every skin — Vibeslop, Hackerman,
 Research, … — and re-themes the moment Desktop changes skin or corners (the `storage` event); the skin's color-scheme
@@ -298,27 +302,28 @@ underline tabs), `.dim-chip` / `.dim-badge` (`.ok` `.warn` `.danger` `.solid`), 
 `--border`, `--primary`, `--sel`, `--radius`, `--radius-lg`, `--radius-pill`, `--sans`, `--mono`, `--display`, …): a
 square skin (panel radius 0, like Portal) also squares every corner, as Portal's doc does.
 
-The four faces are bundled in [fonts/](fonts) (latin subset, OFL) and declared with `font-display: block`; `initTheme()`
+The four faces are bundled in [fonts/](source/fonts) (latin subset, OFL) and declared with `font-display: block`; `initTheme()`
 starts loading all of them, and `themeFontsReady()` resolves when they are in. Nothing is fetched from the network.
 
-Apps vendor dim-app's files (no build step at runtime, works offline): `zenoh.js` needs `zenoh_gateway_client.js` next to
-it, `backend_state.js` needs `zenoh.js`, `react.js` needs `backend_state.js` and `desktop.js`, `events.js` and `desktop_events.js` need
-`zenoh.js` (`shell.js` and `notify.js` stand alone). [vendor.js](vendor.js) refreshes the dim-app files an app already has (and brings any file they import) from the
-version in its URL, which is
-how an app pins a version:
+Apps vendor dim-app (no build step at runtime, works offline) into a `dim-app/` folder that mirrors this repo:
+`dim-app/mod.js` (everything) and/or `dim-app/source/<file>` (one file and what it imports: `zenoh.js` needs
+`zenoh_gateway_client.js`, `react.js` needs `backend_state.js` and `desktop.js`, …). [vendor.js](tools/vendor.js)
+refreshes the files the folder already has (and brings any file they import) from the version in its URL, which is how an
+app pins a version. A folder from before v0.18.0 (files at its top, `dim-app/zenoh.js`) is moved into `source/`, so its
+imports become `dim-app/source/zenoh.js` (or `dim-app/mod.js`).
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.18.0/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.18.0/tools/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
-`--index` also keeps [first_paint.html](first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
+`--index` also keeps [first_paint.html](source/first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
 then replaced in place): Desktop's `/theme.css` and its saved skin before any CSS or JS loads (off Desktop, Portal's page
 color), so an app's first frame is already in Desktop's look. `initTheme()` also posts
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/theme.js"
 
 initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
@@ -368,7 +373,7 @@ Pin the flake input and the import URLs to the same version. To run an app's ser
 
 ```sh
 DIMOS_APP='{"version":1,"name":"my-app","socket":"/tmp/my-app.sock"}' \
-    deno run -A serve.js --frontend dim/apps/my_app/frontend --backend dim/apps/my_app/main.js
+    deno run -A source/serve.js --frontend dim/apps/my_app/frontend --backend dim/apps/my_app/main.js
 ```
 
 Licensed under the Apache License, Version 2.0.

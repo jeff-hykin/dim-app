@@ -1,6 +1,6 @@
-// deno test -A dim_app_test.js
+// deno test -A tests/dim_app_test.js
 import { assert, assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1"
-import { DimApp, dimosKey } from "./dim_app.js"
+import { DimApp, dimosKey } from "../source/dim_app.js"
 import { fakes, tick } from "./test_fakes.js"
 
 const HREF = "http://h:7341/apps/my-app/"

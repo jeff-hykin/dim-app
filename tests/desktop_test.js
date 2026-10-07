@@ -1,6 +1,6 @@
 // deno test desktop_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { appInstalled, openApp, underDesktop } from "./desktop.js"
+import { appInstalled, openApp, underDesktop } from "../source/desktop.js"
 
 const APPS = { apps: [{ name: "dim-controller", title: "Controller", url: "/apps/dim-controller/" }] }
 

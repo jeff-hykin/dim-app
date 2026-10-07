@@ -1,6 +1,6 @@
-// deno test -A zenoh_test.js
+// deno test -A tests/zenoh_test.js
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1"
-import { appBase, checkTopic, getZenoh } from "./zenoh.js"
+import { appBase, checkTopic, getZenoh } from "../source/zenoh.js"
 import { fakes, INFO, tick } from "./test_fakes.js"
 
 Deno.test("appBase: Desktop's base and the app's name from a page URL", () => {

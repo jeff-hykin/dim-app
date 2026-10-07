@@ -1,7 +1,7 @@
-// deno test -A backend_state_test.js
+// deno test -A tests/backend_state_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { getZenoh } from "./zenoh.js"
-import { resolveSource, watchBackendState } from "./backend_state.js"
+import { getZenoh } from "../source/zenoh.js"
+import { resolveSource, watchBackendState } from "../source/backend_state.js"
 import { fakes, INFO, tick } from "./test_fakes.js"
 
 Deno.test("resolveSource: a key or an app-relative URL", () => {

@@ -1,6 +1,6 @@
-// deno test -A desktop_events_test.js
+// deno test -A tests/desktop_events_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { onDesktopEvent, sseParser } from "./desktop_events.js"
+import { onDesktopEvent, sseParser } from "../source/desktop_events.js"
 
 Deno.test("sseParser: one event per blank line, split chunks, CRLF, multi-line data, ignores other fields", () => {
     const seen = []

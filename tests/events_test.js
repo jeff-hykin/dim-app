@@ -1,7 +1,7 @@
-// deno test -A events_test.js
+// deno test -A tests/events_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { appEvents } from "./events.js"
-import { getZenoh } from "./zenoh.js"
+import { appEvents } from "../source/events.js"
+import { getZenoh } from "../source/zenoh.js"
 import { fakes, INFO, tick } from "./test_fakes.js"
 
 Deno.test("appEvents: the frontend topic `events`, onOpen on connect and reconnect, onClose when lost", async () => {

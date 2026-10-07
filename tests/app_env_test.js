@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1"
-import { readDimosApp } from "./app_env.js"
+import { readDimosApp } from "../source/app_env.js"
 
 function withDimosApp(value, fn) {
     if (value === undefined) {

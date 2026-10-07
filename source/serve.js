@@ -2,7 +2,7 @@
 // in this process, and bridges the two over a websocket at `/dim-app/ws` (the SDK's own request/answer channel). The
 // backend's publishEvent() goes to pages over zenoh through Desktop's relay (frontend_publish.js, events.js). An app's
 // flake wraps it as bin/dimos-app-server:
-//     deno run -A serve.js --frontend <dir> [--backend <main.js>]
+//     deno run -A source/serve.js --frontend <dir> [--backend <main.js>]
 // Desktop passes the socket and the rest in the DIMOS_APP env var (app_env.js); the flags are the flake wrapper's.
 import { serveDir } from "jsr:@std/http@1/file-server"
 import { readDimosApp } from "./app_env.js"

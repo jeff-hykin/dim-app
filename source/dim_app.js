@@ -1,7 +1,7 @@
 // DimApp: the page's zenoh-gateway connection (zenoh.js) plus the dimos message codec, so a page subscribes to a
 // dimos stream and gets decoded messages, and publishes plain objects.
 //
-//     import { DimApp } from "./dim-app/dim_app.js"
+//     import { DimApp } from "./dim-app/source/dim_app.js"
 //     const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
 //     const off = app.subscribe("odom", (odom, info) => draw(odom.pose.pose.position)) // info: { key, type, receivedAt }
 //     await app.publish("cmd_vel", "geometry_msgs.Twist", { linear: { x: 0.3 } })

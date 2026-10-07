@@ -56,7 +56,7 @@ Object.defineProperty(globalThis, "location", {
     configurable: true,
 })
 
-const { initTheme, onThemeChange, themeName, desktopSkin, corners } = await import("./theme.js")
+const { initTheme, onThemeChange, themeName, desktopSkin, corners } = await import("../source/theme.js")
 const desktopSaves = (key, value) => {
     storage.set(key, value)
     dispatchEvent(Object.assign(new Event("storage"), { key }))

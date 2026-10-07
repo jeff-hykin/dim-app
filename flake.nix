@@ -19,7 +19,7 @@
                     ''
                 else
                     pkgs.writeShellScriptBin "dimos-app-server" ''
-                        exec ${pkgs.deno}/bin/deno run -A --no-lock ${self}/serve.js \
+                        exec ${pkgs.deno}/bin/deno run -A --no-lock ${self}/source/serve.js \
                             --frontend ${src}/${frontend} --backend ${src}/${backend} "$@"
                     '';
         };

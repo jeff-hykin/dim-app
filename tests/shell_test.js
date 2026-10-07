@@ -1,6 +1,6 @@
 // deno test shell_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { runCommand, runShell } from "./shell.js"
+import { runCommand, runShell } from "../source/shell.js"
 
 Deno.test("runShell outside Desktop runs nothing", async () => {
     assertEquals((await runShell({ title: "x", commands: [{ run: "true" }] })).status, "unavailable")

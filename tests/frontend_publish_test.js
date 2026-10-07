@@ -1,6 +1,6 @@
-// deno test -A frontend_publish_test.js
+// deno test -A tests/frontend_publish_test.js
 import { assertEquals, assertThrows } from "jsr:@std/assert@1"
-import { publishFrontend, stateChanged } from "./frontend_publish.js"
+import { publishFrontend, stateChanged } from "../source/frontend_publish.js"
 
 function relay({ delay = () => 0, status = 200 } = {}) {
     const got = []

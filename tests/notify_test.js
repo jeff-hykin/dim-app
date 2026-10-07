@@ -1,6 +1,6 @@
 // deno test notify_test.js
 import { assertEquals } from "jsr:@std/assert@1"
-import { lowLevelAlert, notify, underDesktop } from "./notify.js"
+import { lowLevelAlert, notify, underDesktop } from "../source/notify.js"
 
 Deno.test("notify outside Desktop resolves to null without fetching", async () => {
     assertEquals(underDesktop(), false)
