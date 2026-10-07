@@ -27,6 +27,8 @@ export function keyMatches(expression, key) {
 export class FakeClient {
     state = "connected"
     subscriptions = []
+    puts = []
+    publishers = []
     #listeners = new Set()
     constructor(url, options) {
         this.url = url
@@ -57,6 +59,7 @@ export class FakeClient {
         this.#listeners.forEach((listener) => listener(state))
     }
     put(key, payload) {
+        this.puts.push([key, payload])
         const bytes = payload instanceof Uint8Array
             ? payload
             : new TextEncoder().encode(typeof payload === "string" ? payload : JSON.stringify(payload))
@@ -65,6 +68,28 @@ export class FakeClient {
                 subscription.callback({ key, bytes, timestamp: 0, seq: 0 })
             }
         }
+    }
+    publisher(key, options) {
+        const publisher = {
+            key,
+            options,
+            sent: [],
+            deadman: null,
+            put: (bytes) => {
+                publisher.sent.push(bytes)
+                this.put(key, bytes)
+            },
+            setDeadman(bytes) {
+                this.deadman = bytes
+                return Promise.resolve()
+            },
+            closed: false,
+            close() {
+                this.closed = true
+            },
+        }
+        this.publishers.push(publisher)
+        return publisher
     }
     close() {}
 }
