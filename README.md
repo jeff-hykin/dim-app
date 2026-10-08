@@ -11,6 +11,28 @@ Layout: [mod.js](mod.js) re-exports the whole API (`import { DimApp, initTheme }
 are in [source/](source), their tests in [tests/](tests) (`deno test -A`), and [tools/vendor.js](tools/vendor.js)
 vendors them into an app.
 
+## Decoding dimos messages: the Desktop's codec endpoint
+
+The dimos gateway (reached through Desktop) serves a codec generated from the installed dimos's own message types:
+`GET /dimos/msgs.js` for pages, `GET /dimos/msgs.ts` for Deno backends. `DimApp` requires you to point at it, and the
+app must declare it in its `dimos.yaml` (Desktop refuses undeclared calls):
+
+```yaml
+uses:
+    "@dimos-gateway":
+        - GET /msgs.js
+```
+
+```js
+import { DimApp } from "./dim-app/mod.js"
+
+// relative to the page (served at /apps/<name>/), so ../../ is Desktop's root
+const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
+app.subscribe("odom", (odom) => console.log(odom.pose.pose.position)) // already decoded
+```
+
+There is no default: an app without `msgDecodeEndpoint` throws, so every app states the endpoint it depends on.
+
 ## Frontend (browser)
 
 ```js
