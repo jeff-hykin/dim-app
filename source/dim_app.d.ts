@@ -24,11 +24,18 @@ export interface DimSubscribeOptions extends SubscribeOptions {
     /** "<pkg>.<Type>": only that type's key */
     type?: string
 }
+/** Silent until the first put(); its deadman is armed only by a put of something other than the stop value. */
 export interface DimPublisher {
     readonly key: string
     readonly type: string
+    /** the gateway client's publisher, null until the first put() */
     readonly raw: unknown
+    /** whether the gateway holds the deadman now (true after a drive put, false after the stop value or stop()) */
+    readonly armed: boolean
     put(value: unknown): void
+    /** puts `value` (default: the deadman's stop value) and disarms the deadman */
+    stop(value?: unknown): Promise<void>
+    /** stores the stop value; armed by the next put of anything else (needs connectOptions { heartbeatHz }) */
     setDeadman(value: unknown): Promise<void>
     clearDeadman(): Promise<void>
     onTripped(listener: (reason: string) => void): () => void

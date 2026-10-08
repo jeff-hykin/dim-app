@@ -111,7 +111,7 @@ Deno.test("DimApp: subscribe with a type and reliable delivery; info.receivedAt;
 })
 
 Deno.test("DimApp: publish encodes by type name or type object; publisher puts and arms a deadman", async () => {
-    await withApp({ msgs: fakeMsgs() }, async (app, client) => {
+    await withApp({ msgs: fakeMsgs(), connectOptions: { heartbeatHz: 5 } }, async (app, client) => {
         await app.publish("cmd", "test_msgs.Num", { n: 5 })
         await app.publish("cmd", app.msgs.test_msgs.Num, { n: 6 })
         assertEquals(client.puts.map(([key, bytes]) => [key, [...bytes]]), [
@@ -120,8 +120,8 @@ Deno.test("DimApp: publish encodes by type name or type object; publisher puts a
         ])
         await assertRejects(() => app.publish("cmd", "nope.Nope", {}), Error, "unknown message type")
         const publisher = await app.publisher("cmd", "test_msgs.Num", { delivery: "latest" })
-        publisher.put({ n: 9 })
         await publisher.setDeadman({})
+        publisher.put({ n: 9 })
         const raw = client.publishers[0]
         assertEquals([raw.key, raw.options, [...raw.sent[0]], [...raw.deadman]], [
             "dimos/cmd/test_msgs.Num",
@@ -131,6 +131,63 @@ Deno.test("DimApp: publish encodes by type name or type object; publisher puts a
         ])
         publisher.close()
         assert(raw.closed)
+    })
+})
+
+// Safety (e2e F9): opening a page must not drive. Nothing reaches the gateway, not even an armed deadman (which the
+// gateway publishes when a heartbeat lapses or the page goes away), until the user's first drive put().
+Deno.test("DimApp publisher: zero publishes and no deadman until the first put()", async () => {
+    await withApp({ msgs: fakeMsgs(), connectOptions: { heartbeatHz: 5 } }, async (app, client) => {
+        const publisher = await app.publisher("cmd_vel", "test_msgs.Num", { delivery: "latest" })
+        await publisher.setDeadman({ n: 0 })
+        let tripped = null
+        publisher.onTripped((reason) => (tripped = reason))
+        await tick(20)
+        assertEquals([client.puts.length, client.publishers.length, publisher.raw, publisher.armed], [
+            0,
+            0,
+            null,
+            false,
+        ])
+        assertEquals(tripped, null)
+        await publisher.clearDeadman()
+        publisher.close()
+        assertEquals([client.puts.length, client.publishers.length], [0, 0])
+    })
+})
+
+Deno.test("DimApp publisher: a drive arms the deadman, the stop disarms it, idle stays silent", async () => {
+    await withApp({ msgs: fakeMsgs(), connectOptions: { heartbeatHz: 5 } }, async (app, client) => {
+        const publisher = await app.publisher("cmd_vel", "test_msgs.Num")
+        await publisher.setDeadman({ n: 0 })
+        publisher.put({ n: 3 })
+        publisher.put({ n: 3 })
+        const raw = client.publishers[0]
+        assert(publisher.armed)
+        assertEquals(raw.deadmanLog, [["set", [0]]]) // armed once, not per put
+        publisher.put({ n: 0 }) // the release: the stop goes out, then the deadman is cleared
+        await tick()
+        assertEquals([publisher.armed, raw.deadman, raw.deadmanLog.at(-1)], [false, null, ["clear"]])
+        assertEquals(raw.sent.map((bytes) => bytes[0]), [3, 3, 0])
+        const sentBefore = client.puts.length
+        await tick(20)
+        assertEquals(client.puts.length, sentBefore) // idle: nothing more
+        publisher.put({ n: 2 }) // driving again re-arms
+        assert(publisher.armed)
+        await publisher.stop() // stop(): the deadman's value, then disarmed
+        assertEquals([publisher.armed, raw.sent.at(-1)[0], raw.deadmanLog.length], [false, 0, 4])
+        publisher.close()
+    })
+})
+
+Deno.test("DimApp publisher: setDeadman needs a heartbeat; a closed publisher refuses puts", async () => {
+    await withApp({ msgs: fakeMsgs() }, async (app, client) => {
+        const publisher = await app.publisher("cmd_vel", "test_msgs.Num")
+        assertThrows(() => publisher.setDeadman({}), Error, "heartbeat")
+        assertThrows(() => publisher.stop(), Error, "setDeadman")
+        publisher.close()
+        assertThrows(() => publisher.put({ n: 1 }), Error, "closed")
+        assertEquals(client.puts.length, 0)
     })
 })
 

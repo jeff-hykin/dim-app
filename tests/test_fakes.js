@@ -75,12 +75,20 @@ export class FakeClient {
             options,
             sent: [],
             deadman: null,
+            /** every setDeadman/clearDeadman in order: ["set", bytes] | ["clear"] */
+            deadmanLog: [],
             put: (bytes) => {
                 publisher.sent.push(bytes)
                 this.put(key, bytes)
             },
             setDeadman(bytes) {
                 this.deadman = bytes
+                this.deadmanLog.push(["set", [...bytes]])
+                return Promise.resolve()
+            },
+            clearDeadman() {
+                this.deadman = null
+                this.deadmanLog.push(["clear"])
                 return Promise.resolve()
             },
             closed: false,

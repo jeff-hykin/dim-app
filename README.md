@@ -14,7 +14,7 @@ vendors them into an app.
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -24,7 +24,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohGatewayUrl, dimosDir, dimosPython, ... }
@@ -71,9 +71,18 @@ const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
 app.subscribe("odom", (odom, { key, type, receivedAt }) => draw(odom.pose.pose)) // dimos/odom/*, decoded
 app.subscribe("camera/image", show, { type: "sensor_msgs.Image", delivery: "reliable" }) // one type, every frame
 await app.publish("cmd_vel", "geometry_msgs.Twist", { linear: { x: 0.3 } }) // encoded, put on dimos/cmd_vel/<type>
-const drive = await app.publisher("cmd_vel", app.msgs.geometry_msgs.Twist) // a steady stream on its own channel
-drive.put({ angular: { z: 0.5 } }); await drive.setDeadman({}) // zero twist if this page dies (needs heartbeatHz)
+const drive = await app.publisher("cmd_vel", app.msgs.geometry_msgs.Twist) // a steady stream; silent until put()
+await drive.setDeadman({}) // the stop value (a zero Twist); armed only once the user drives (needs heartbeatHz)
+onPress(() => drive.put({ angular: { z: 0.5 } })) // a drive: sent, and the deadman is armed on the gateway
+onRelease(() => drive.stop()) // the zero Twist goes out and the deadman is disarmed: idle is silent again
 ```
+
+**Never actuate without a user action.** A page must publish nothing on a command topic (cmd_vel, tele_cmd_vel, …) until
+the user presses a drive control, and nothing while idle. `publisher()` enforces the deadman half of that: it opens no
+channel before the first `put()`, and the deadman (which the gateway publishes when the page's heartbeat lapses, e.g. a
+background tab, or the page closes or reloads) is armed only by a put of something other than its stop value, and
+disarmed by `stop()` or a put of the stop value. The rest is the page's: call `put()` only from a user's input, and send
+the stop only after that input (a `pointerleave` fires on hover too, so guard it with "was driving").
 
 dimos keys topic `<topic>` of type `<pkg>.<Type>` as `dimos/<topic>/<pkg>.<Type>`, so the type comes from the key. A type
 the codec doesn't know arrives as raw bytes (one warning). `msgDecodeEndpoint` is required (relative to the page or
@@ -202,7 +211,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -235,7 +244,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -260,7 +269,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -313,7 +322,7 @@ app pins a version. A folder from before v0.18.0 (files at its top, `dim-app/zen
 imports become `dim-app/source/zenoh.js` (or `dim-app/mod.js`).
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.18.0/tools/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.18.1/tools/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](source/first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
@@ -322,8 +331,8 @@ color), so an app's first frame is already in Desktop's look. `initTheme()` also
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.1/source/theme.js"
 
 initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
