@@ -227,3 +227,23 @@ Deno.test({
         })
     },
 })
+
+Deno.test("DimApp: subscribe's update() changes the running subscription in place; before it opens, it opens with them", async () => {
+    await withApp({ msgs: fakeMsgs() }, async (app, client) => {
+        const off = app.subscribe("camera", () => {}, { maxHz: 10 })
+        const early = app.subscribe("lidar", () => {}, { maxHz: 5 })
+        await early.update({ maxHz: 2, playoutDelay: [100, 400] }) // the codec promise hasn't let it open yet
+        await tick()
+        assertEquals(client.open().map((s) => [s.key, s.options]), [
+            ["dimos/camera/*", { delivery: "latest", maxHz: 10 }],
+            ["dimos/lidar/*", { delivery: "latest", maxHz: 2, playoutDelay: [100, 400] }],
+        ])
+        await off.update({ maxHz: 30, playoutDelay: [100, 400] })
+        assertEquals(client.subscriptions.length, 2)
+        assertEquals(client.subscriptions[0].updates, [{ maxHz: 30, playoutDelay: [100, 400] }])
+        off.unsubscribe()
+        early()
+        assertEquals(client.open().length, 0)
+        await assertRejects(() => off.update({ maxHz: 1 }), Error, "closed subscription")
+    })
+})

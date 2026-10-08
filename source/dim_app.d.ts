@@ -41,6 +41,26 @@ export interface DimPublisher {
     onTripped(listener: (reason: string) => void): () => void
     close(): void
 }
+/** What `update()` may change on a running subscription; `null` puts an option back to its default. */
+export interface SubscriptionUpdate {
+    maxHz?: number | null
+    minQuality?: number | null
+    qualityToHzTradeoff?: number | null
+    bandwidthPriority?: number | null
+    maxBitrate?: number | null
+    minResolutionScale?: number | null
+    maxResolution?: [number, number] | null
+    /** video: [min, max] ms the browser may hold a frame to smooth out jitter ([0, 0] = show at once) */
+    playoutDelay?: [number, number] | null
+    encodeOptions?: { quality?: number }
+}
+/** Calling it unsubscribes. */
+export interface DimSubscription {
+    (): void
+    unsubscribe(): void
+    /** changes the running subscription's options in place (same channel and video track) */
+    update(changes: SubscriptionUpdate): Promise<void>
+}
 export interface DimAppOptions extends GetZenohOptions {
     /** the codec module's URL, relative to the page or absolute, e.g. "../../dimos/msgs.js" */
     msgDecodeEndpoint: string
@@ -58,7 +78,7 @@ export class DimApp {
         topic: string,
         callback: (message: T | Uint8Array, info: MessageInfo) => void,
         options?: DimSubscribeOptions,
-    ): () => void
+    ): DimSubscription
     publish(topic: string, type: string | MsgType, value: unknown): Promise<void>
     publisher(topic: string, type: string | MsgType, options?: Record<string, unknown>): Promise<DimPublisher>
 }

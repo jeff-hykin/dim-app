@@ -1,6 +1,6 @@
 // deno test -A tests/zenoh_test.js
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1"
-import { appBase, checkTopic, getZenoh } from "../source/zenoh.js"
+import { assert, assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1"
+import { appBase, checkTopic, getZenoh, updatedOptions } from "../source/zenoh.js"
 import { fakes, INFO, tick } from "./test_fakes.js"
 
 Deno.test("appBase: Desktop's base and the app's name from a page URL", () => {
@@ -118,4 +118,55 @@ Deno.test("getZenoh: subscriptions made before connecting open once connected; j
     } finally {
         zenoh.close()
     }
+})
+
+Deno.test("getZenoh: update() changes a lone channel in place; a shared one moves only this subscriber", async () => {
+    const fake = fakes()
+    const zenoh = getZenoh({ href: "http://h/apps/my-app/", connect: fake.connect, fetch: fake.fetch })
+    try {
+        await zenoh.ready
+        const client = fake.clients[0]
+        const got = []
+        const off = zenoh.subscribe("dimos/cam", { maxHz: 10 }, (message) => got.push(message.key))
+        assertEquals(typeof off.update, "function")
+        assertEquals(off.unsubscribe, off)
+        await off.update({ maxHz: 30, playoutDelay: [100, 400], encodeOptions: { quality: 80 } })
+        assertEquals(client.subscriptions.length, 1) // same channel, no resubscribe
+        assertEquals(client.subscriptions[0].updates, [{
+            maxHz: 30,
+            playoutDelay: [100, 400],
+            encodeOptions: { quality: 80 },
+        }])
+        await off.update({ playoutDelay: null })
+        // a later subscriber with the merged options joins that channel
+        const offSame = zenoh.subscribe("dimos/cam", { maxHz: 30, encodeOptions: { quality: 80 } }, () => {})
+        assertEquals(client.subscriptions.length, 1)
+        // shared now: this one's update moves it to a new channel and leaves the other's untouched
+        await off.update({ maxHz: 5 })
+        assertEquals(client.open().map((s) => s.options.maxHz), [30, 5])
+        assertEquals(client.subscriptions[0].updates.length, 2)
+        client.put("dimos/cam", new Uint8Array([1]))
+        assertEquals(got, ["dimos/cam"]) // delivered once, from its new channel
+        // refused by the gateway: the error comes back and the options stay
+        client.subscriptions[1].refuse = "can't change delivery"
+        await assertRejects(() => off.update({ maxHz: 6 }), Error, "can't change delivery")
+        offSame()
+        assertEquals(client.open().map((s) => s.options.maxHz), [5])
+        off()
+        assertEquals(client.open().length, 0)
+        await assertRejects(() => off.update({ maxHz: 1 }), Error, "closed subscription")
+    } finally {
+        zenoh.close()
+    }
+})
+
+Deno.test("updatedOptions: null removes, encodeOptions merges", () => {
+    assertEquals(
+        updatedOptions({ maxHz: 10, playoutDelay: [0, 0], encodeOptions: { quality: 50, x: 1 } }, {
+            playoutDelay: null,
+            maxHz: 20,
+            encodeOptions: { quality: 70 },
+        }),
+        { maxHz: 20, encodeOptions: { quality: 70, x: 1 } },
+    )
 })

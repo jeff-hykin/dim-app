@@ -1,4 +1,6 @@
 // Test doubles for zenoh.js: a fake zenoh-gateway client and Desktop's discovery answer.
+import { updatedOptions } from "../source/zenoh.js"
+
 export const INFO = {
     namespace: "dimos-desktop/test-7341",
     desktop: "dimos-desktop/test-7341/desktop",
@@ -42,6 +44,17 @@ export class FakeClient {
             closed: false,
             close() {
                 this.closed = true
+            },
+            /** every update() in order; `refuse` makes the next one reject */
+            updates: [],
+            refuse: null,
+            update(changes) {
+                if (this.refuse) {
+                    return Promise.reject(new Error(this.refuse))
+                }
+                this.updates.push(changes)
+                this.options = updatedOptions(this.options, changes) // as the real client keeps them
+                return Promise.resolve()
             },
         }
         this.subscriptions.push(subscription)
