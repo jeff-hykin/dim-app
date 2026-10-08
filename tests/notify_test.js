@@ -26,6 +26,13 @@ Deno.test("notify posts the payload to <origin>/api/notifications", async () => 
         assertEquals(seen[0][0], "http://127.0.0.1:7000/api/notifications")
         assertEquals(seen[0][1].sound, "battery")
         assertEquals(seen[0][1].icon, "/api/apps/controller/icon")
+        assertEquals(seen[0][1].modals, undefined)
+        const modals = { details: { body: "**boom**", pre: "log", copy: true, actions: [["Close", "close"]] } }
+        await notify({ title: "x", actions: [["Show details", "modal:details"]], modals, app: "c" }, {
+            origin: "http://127.0.0.1:7000",
+        })
+        assertEquals(seen[1][1].modals, modals)
+        assertEquals(seen[1][1].actions, [["Show details", "modal:details"]])
     } finally {
         globalThis.fetch = realFetch
     }

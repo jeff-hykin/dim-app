@@ -36,7 +36,7 @@ There is no default: an app without `msgDecodeEndpoint` throws, so every app sta
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -46,7 +46,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohGatewayUrl, dimosDir, dimosPython, ... }
@@ -265,7 +265,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -298,10 +298,18 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
+// more than a banner holds: a modal (markdown body, a log, Copy, its own buttons), kept with the notification
+notify({
+    title: "Calibration failed",
+    body: "camera 2 didn't answer",
+    kind: "warn",
+    actions: [["Show details", "modal:details"], ["Retry", "post:/apps/my-app/api/calibrate"]],
+    modals: { details: { body: "**camera 2** timed out", pre: logTail, copy: true, actions: [["Close", "close"]] } },
+})
 
 // once per dip below 20 %, re-armed above 25 %
 const battery = lowLevelAlert({
@@ -313,7 +321,9 @@ battery(percent) // on every reading
 ```
 
 `sound` is `default` (vibraphone), `urgent` (arpeggio) or `battery` (game-over drop); `icon` defaults to the app's own
-icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
+icon. Actions: an app name, `open:<app>/<path>`, `chat`, `run:<blueprint>`, `stop`, `logs:<blueprint>`, `toast:<text>`,
+`post:<path>[ <json body>]`, `modal:<key>` (opens `modals[key]`) and `dismiss`; modals (Desktop 0.2.137+, older ones
+ignore them) are Desktop's docs/api.md "Notification actions and modals". A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
 
 ## Terminal tool: run a shell command (sudo too) in Desktop
 
@@ -323,7 +333,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -376,7 +386,7 @@ app pins a version. A folder from before v0.18.0 (files at its top, `dim-app/zen
 imports become `dim-app/source/zenoh.js` (or `dim-app/mod.js`).
 
 ```sh
-deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.20.4/tools/vendor.js frontend/src/dim-app --index frontend/index.html
+deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.21.0/tools/vendor.js frontend/src/dim-app --index frontend/index.html
 ```
 
 `--index` also keeps [first_paint.html](source/first_paint.html) in the app's `index.html` (inserted at the top of `<head>`,
@@ -385,8 +395,8 @@ color), so an app's first frame is already in Desktop's look. `initTheme()` also
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.20.4/source/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.0/source/theme.js"
 
 initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
