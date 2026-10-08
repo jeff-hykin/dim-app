@@ -5,7 +5,7 @@ import { assert, assertEquals } from "jsr:@std/assert@1"
 import { parse } from "jsr:@std/yaml@1"
 
 const repo = new URL("../", import.meta.url)
-const VENDORED = ["msgs_fallback.js", "zenoh_gateway_client.js"]
+const VENDORED = ["msgs_fallback.js"]
 // an app's own endpoints (the consuming app serves them), not a gateway's
 const OWN = [/^api\/state\//]
 // the gateway prefixes as source/ writes them (relative to /apps/<name>/ or absolute), and the uses: group they go in
@@ -41,7 +41,7 @@ for await (const entry of Deno.readDir(new URL("source/", repo))) {
     for (const [, name, literal] of text.matchAll(/const (\w+) = [`"]([^`"]*)[`"]/g)) {
         text = text.replaceAll("${" + name + "}", literal)
     }
-    usesZenoh ||= text.includes("zenoh_gateway_client.js")
+    usesZenoh ||= text.includes("vendor/zenoh-gateway/zenoh_gateway.js")
     text.split("\n").forEach((line, index) => {
         const code = line.trim()
         if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) {

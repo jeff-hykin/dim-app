@@ -2,7 +2,7 @@
 // Refreshes an app's vendored copy of dim-app (the files already in that folder) from the dim-app version this script
 // was loaded from, so the version an app pins is the URL it ran:
 //
-//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.20.3/tools/vendor.js frontend/src/dim-app
+//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.20.4/tools/vendor.js frontend/src/dim-app
 //
 // The folder mirrors the repo: `mod.js` (everything) and/or `source/<file>` (one file and what it imports). A new app:
 // create the files it wants (e.g. `touch mod.js`, or `mkdir source; touch source/theme.css source/theme.js`), then run
@@ -62,6 +62,8 @@ const exists = async (path) => {
 /** `path` (relative to `from`, both inside the repo) as a repo-relative path */
 const resolve = (path, from) => new URL(path, new URL(from, repo)).href.slice(repo.href.length)
 
+// files dim-app no longer has, replaced by another (v0.20.4: the gateway client moved to source/vendor/zenoh-gateway/)
+const RETIRED = ["source/zenoh_gateway_client.js"]
 const wanted = []
 const moved = []
 for await (const entry of Deno.readDir(folder)) {
@@ -97,7 +99,7 @@ while (queue.length) {
     // a file:// copy of dim-app throws for a missing file where https answers 404
     const response = await fetch(source).catch(() => new Response(null, { status: 404 }))
     if (!response.ok) {
-        if (!path.endsWith(".d.ts") || wanted.includes(path)) {
+        if ((!path.endsWith(".d.ts") || wanted.includes(path)) && !RETIRED.includes(path)) {
             console.log(`skip ${path} (not in dim-app: ${response.status})`)
         }
         await response.body?.cancel()
@@ -116,6 +118,10 @@ while (queue.length) {
     written.add(path)
     console.log(`${path} ← ${source.href}`)
     if (path.endsWith(".js")) {
+        // a vendored third-party file names its license (`// license: ./LICENSE`), which comes along with it
+        for (const [, license] of text.matchAll(/^\/\/ license: (\.\/\S+)$/gm)) {
+            queue.push(resolve(license, path))
+        }
         // the usage examples in a file's comments ("./dim-app/source/zenoh.js") aren't its imports
         const code = text.replace(/^\s*\/\/.*$/gm, "")
         for (const [, dependency] of code.matchAll(/(?:from|import\()\s*"(\.\/[\w./-]+\.js)"/g)) {
@@ -131,6 +137,12 @@ while (queue.length) {
         for (const [, file] of text.matchAll(/url\("(\.\/[^"]+)"\)/g)) {
             queue.push(resolve(file, path))
         }
+    }
+}
+for (const path of RETIRED) {
+    if (await exists(`${folder}/${path}`) && !written.has(path)) {
+        await Deno.remove(`${folder}/${path}`)
+        console.log(`removed ${path} (retired)`)
     }
 }
 for (const name of moved) {

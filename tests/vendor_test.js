@@ -54,7 +54,29 @@ Deno.test("vendor.js: the import examples in a file's comments aren't fetched", 
         await Deno.mkdir(`${folder}/source`)
         await Deno.writeTextFile(`${folder}/source/dim_app.js`, "")
         const out = await run(folder)
-        assert(await exists(`${folder}/source/zenoh_gateway_client.js`), "a real dynamic import still comes along")
+        assert(
+            await exists(`${folder}/source/vendor/zenoh-gateway/zenoh_gateway.js`),
+            "a real dynamic import still comes along",
+        )
+        assert(await exists(`${folder}/source/vendor/zenoh-gateway/vendor/fzstd.js`), "and what it imports")
+        assert(await exists(`${folder}/source/vendor/zenoh-gateway/LICENSE`), "with its license")
+        assert(await exists(`${folder}/source/vendor/zenoh-gateway/vendor/fzstd.LICENSE`))
+        assert(!out.includes("skip"), out)
+    } finally {
+        await Deno.remove(folder, { recursive: true })
+    }
+})
+
+Deno.test("vendor.js: an app's pre-0.20.4 zenoh_gateway_client.js is replaced by source/vendor/zenoh-gateway/", async () => {
+    const folder = await Deno.makeTempDir()
+    try {
+        await Deno.mkdir(`${folder}/source`)
+        for (const file of ["zenoh.js", "zenoh_gateway_client.js"]) {
+            await Deno.writeTextFile(`${folder}/source/${file}`, "old")
+        }
+        const out = await run(folder)
+        assert(!(await exists(`${folder}/source/zenoh_gateway_client.js`)))
+        assert(await exists(`${folder}/source/vendor/zenoh-gateway/zenoh_gateway.js`))
         assert(!out.includes("skip"), out)
     } finally {
         await Deno.remove(folder, { recursive: true })
