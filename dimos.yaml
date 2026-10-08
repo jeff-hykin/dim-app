@@ -1,0 +1,31 @@
+# dim-app is a library (vendored into apps as dim-app/), not an app: this lists what its helpers call, so an app
+# using a helper knows what to put in its own `uses:`. tests/dimos_yaml_test.js keeps it in sync with source/.
+spec-version: v1.0
+uses:
+    "@dimos-gateway":
+        # dim_app.js: DimApp's message codec (msgDecodeEndpoint, e.g. ../../dimos/msgs.js)
+        - GET /msgs.js
+    "@desktop-gateway":
+        # desktop.js: listApps/findApp/openApp read the installed apps
+        - GET /api/apps
+        # desktop.js: openApp outside Desktop's shell opens /?app=<id> (the Launcher's filters go in that link)
+        - GET /
+        # notify.js: notifications, with the app's icon as the default
+        - POST /api/notifications
+        - GET /api/apps/{app}/icon
+        # errors.js: the error feed
+        - POST /api/errors
+        # shell.js: runShell (start, long-poll, cancel)
+        - POST /api/desktop/shell
+        - GET /api/desktop/shell/{id}
+        - POST /api/desktop/shell/{id}/cancel
+        # zenoh.js: where the zenoh-gateway and this app's namespace are
+        - GET /api/desktop/zenoh
+        # desktop_events.js: the deprecated SSE fallback when there's no zenoh-gateway
+        - GET /api/events
+        # frontend_publish.js (backend): publish on <ns>/apps/<app>/frontend/<topic>
+        - POST /desktop/frontend/{app}/{topic}
+        # theme.js: Desktop's skin tokens
+        - GET /theme.css
+    # zenoh.js (getZenoh, DimApp, desktop_events.js): Subscription.update needs >=0.5.1
+    "@zenoh-gateway": ">=0.5.1"
