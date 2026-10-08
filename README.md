@@ -315,7 +315,7 @@ battery(percent) // on every reading
 `sound` is `default` (vibraphone), `urgent` (arpeggio) or `battery` (game-over drop); `icon` defaults to the app's own
 icon. A Deno backend passes Desktop's URL: `notify({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
 
-## Shell commands (sudo too) → Desktop
+## Terminal tool: run a shell command (sudo too) in Desktop
 
 [shell.js](source/shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
 shows them over the app with a note for each, nothing runs until the user presses Run, they run in one terminal (sudo
