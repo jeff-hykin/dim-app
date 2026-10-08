@@ -44,17 +44,23 @@ Deno.test("appInstalled: built-ins always, apps by name or title", async () => {
     })
 })
 
-Deno.test("openApp in the shell: posts open_app with the install name; the Launcher gets its filters first", async () => {
+Deno.test("openApp in the shell: posts open_app with the install name; the Launcher gets its filters in its link", async () => {
     const seen = await asPage("http://127.0.0.1:7341/apps/dim-controller/", {}, async () => {
         assertEquals(await openApp("Controller", { path: "#record" }), true)
-        assertEquals(await openApp("launcher", { kind: "blueprint", stream: "cmd_vel" }), true)
+        assertEquals(
+            await openApp("launcher", { query: "go2 nav", robot: "go2", stream: "cmd_vel", selected: "unitree-go2" }),
+            true,
+        )
+        assertEquals(await openApp("launcher"), true)
         assertEquals(await openApp("dim-nope", {}), false)
     })
-    assertEquals(seen.posts.map(([data]) => [data.app, data.path]), [["dim-controller", "#record"], ["launcher", null]])
+    assertEquals(seen.posts.map(([data]) => [data.app, data.path]), [
+        ["dim-controller", "#record"],
+        ["launcher", "?q=go2+nav&robot=go2&needs=cmd_vel&blueprint=unitree-go2"],
+        ["launcher", null],
+    ])
     assertEquals(seen.posts[0][0].dimosShell, 1)
-    const put = seen.fetches.find(([, method]) => method === "PUT")
-    assertEquals(put[0], "/api/launcher/state")
-    assertEquals(put[2], { query: "", kind: "blueprint", robot: "", selected: "", stream: "cmd_vel" })
+    assertEquals(seen.fetches.filter(([, method]) => method !== "GET"), [])
 })
 
 Deno.test("openApp on its own page under Desktop opens /?app=<id> in a new tab", async () => {
