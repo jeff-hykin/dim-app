@@ -2,7 +2,7 @@
 // Refreshes an app's vendored copy of dim-app (the files already in that folder) from the dim-app version this script
 // was loaded from, so the version an app pins is the URL it ran:
 //
-//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.20.1/tools/vendor.js frontend/src/dim-app
+//     deno run -A https://raw.githubusercontent.com/jeff-hykin/dim-app/v0.20.2/tools/vendor.js frontend/src/dim-app
 //
 // The folder mirrors the repo: `mod.js` (everything) and/or `source/<file>` (one file and what it imports). A new app:
 // create the files it wants (e.g. `touch mod.js`, or `mkdir source; touch source/theme.css source/theme.js`), then run
