@@ -191,22 +191,75 @@ Deno.test("DimApp publisher: setDeadman needs a heartbeat; a closed publisher re
     })
 })
 
-Deno.test("DimApp: an endpoint that doesn't load leaves messages raw", async () => {
-    const warn = console.warn
-    console.warn = () => {}
+/** Runs `body(baseUrl)` with a local server that answers 404 to everything. */
+async function withServer(body) {
+    const server = Deno.serve(
+        { port: 0, hostname: "127.0.0.1", onListen() {} },
+        (request) =>
+            new URL(request.url).pathname === "/msgs.js"
+                ? new Response(moduleText, { headers: { "content-type": "text/javascript" } })
+                : new Response("not found", { status: 404 }),
+    )
     try {
-        await withApp({ msgDecodeEndpoint: "data:text/javascript,throw new Error('boom')" }, async (app, client) => {
-            assertEquals(app.msgs, null)
-            let got = null
-            app.subscribe("odom", (message) => (got = message))
-            await tick()
-            client.put("dimos/odom/nav_msgs.Odometry", new Uint8Array([4]))
-            assertEquals([...got], [4])
-            await assertRejects(() => app.publish("cmd_vel", "geometry_msgs.Twist", {}), Error, "didn't load")
-        })
+        await body(`http://127.0.0.1:${server.addr.port}`)
     } finally {
-        console.warn = warn
+        await server.shutdown()
     }
+}
+
+/** Runs `body()` with console.warn/debug captured: `{ warnings, debugs }`. */
+async function quietly(body) {
+    const logged = { warnings: [], debugs: [] }
+    const { warn, debug } = console
+    console.warn = (...args) => logged.warnings.push(args)
+    console.debug = (...args) => logged.debugs.push(args)
+    try {
+        await body(logged)
+    } finally {
+        Object.assign(console, { warn, debug })
+    }
+}
+
+Deno.test("DimApp: an endpoint that 404s falls back to the bundled codec, with one debug line and no warning", async () => {
+    await withServer(async (base) => {
+        await quietly(async (logged) => {
+            await withApp({ msgDecodeEndpoint: `${base}/dimos/msgs.js` }, async (app, client) => {
+                assertEquals(typeof app.msgs?.decodeChannel, "function")
+                const seen = []
+                app.subscribe("cmd_vel", (message, info) => seen.push([message, info.type]))
+                await tick()
+                await app.publish("cmd_vel", "geometry_msgs.Twist", { linear: { x: 0.5 } })
+                assertEquals(client.puts[0][0], "dimos/cmd_vel/geometry_msgs.Twist")
+                assertEquals(seen, [[
+                    { linear: { x: 0.5, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } },
+                    "geometry_msgs.Twist",
+                ]])
+            })
+            assertEquals(logged.warnings, [])
+            assertEquals(logged.debugs.length, 1)
+        })
+    })
+})
+
+Deno.test("DimApp: an endpoint that throws (or can't be reached) falls back too", async () => {
+    await quietly(async (logged) => {
+        for (const endpoint of ["data:text/javascript,throw new Error('boom')", "http://127.0.0.1:1/msgs.js"]) {
+            await withApp({ msgDecodeEndpoint: endpoint }, (app) => {
+                assertEquals(typeof app.msgs?.lookup("nav_msgs.Odometry")?.decode, "function", endpoint)
+            })
+        }
+        assertEquals(logged.warnings, [])
+    })
+})
+
+Deno.test("DimApp: a working endpoint wins over the bundled codec", async () => {
+    await quietly(async (logged) => {
+        const endpoint = "data:text/javascript,export const fromEndpoint = true"
+        await withApp({ msgDecodeEndpoint: endpoint }, (app) => {
+            assertEquals(app.msgs.fromEndpoint, true)
+        })
+        assertEquals(logged.debugs, [])
+    })
 })
 
 Deno.test({

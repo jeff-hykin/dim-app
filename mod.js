@@ -6,6 +6,7 @@
 
 export { DimApp, dimosKey } from "./source/dim_app.js"
 export { appBase, checkTopic, getZenoh } from "./source/zenoh.js"
+export { rosCodec, rosTypeName, rosTypeOfSample } from "./source/ros.js"
 export { readDimosApp } from "./source/app_env.js"
 export { DimAppBackend, dimContext } from "./source/backend.js"
 export { DimAppFrontend, VERSION } from "./source/frontend.js"

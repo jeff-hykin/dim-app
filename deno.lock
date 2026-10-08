@@ -14,5 +14,14 @@
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     }
+  },
+  "remote": {
+    "https://esm.sh/@foxglove/cdr@3.5.1/denonext/cdr.mjs": "198493f9fd79ff04f13c8e63f698253f4b9068ed912ff1a34ba5472f6ad49692",
+    "https://esm.sh/@foxglove/rosmsg-msgs-common@3.3.0/X-ZEBmb3hnbG92ZS9jZHJAMy41LjEsQGZveGdsb3ZlL21lc3NhZ2UtZGVmaW5pdGlvbkAwLjUuMCxAZm94Z2xvdmUvcm9zdGltZUAxLjEuMw/denonext/rosmsg-msgs-common.mjs": "fa206af16c1a57fdcaad7cb4825499022b968f0ff64e3b4a6680c4cfee596b8d",
+    "https://esm.sh/@foxglove/rosmsg-msgs-common@3.3.0?deps=@foxglove/cdr@3.5.1,@foxglove/rostime@1.1.3,@foxglove/message-definition@0.5.0": "f8009d40e42801b5bbef316e2aa6a13e66b5d1e26b26a7b8e16c47f814759728",
+    "https://esm.sh/@foxglove/rosmsg2-serialization@3.1.2/X-ZEBmb3hnbG92ZS9jZHJAMy41LjEsQGZveGdsb3ZlL21lc3NhZ2UtZGVmaW5pdGlvbkAwLjUuMCxAZm94Z2xvdmUvcm9zdGltZUAxLjEuMw/denonext/rosmsg2-serialization.mjs": "442d401d067625f1b0a395b2a6225a624eedc03b1bf2eb3ac4017fa3ed40fd0e",
+    "https://esm.sh/@foxglove/rosmsg2-serialization@3.1.2?deps=@foxglove/cdr@3.5.1,@foxglove/rostime@1.1.3,@foxglove/message-definition@0.5.0": "2092fda8f298da0eb518763ddaa0229861e492e6f36809650cdb3bcb3085c5fe",
+    "https://esm.sh/@foxglove/rosmsg@5.0.5/X-ZEBmb3hnbG92ZS9jZHJAMy41LjEsQGZveGdsb3ZlL21lc3NhZ2UtZGVmaW5pdGlvbkAwLjUuMCxAZm94Z2xvdmUvcm9zdGltZUAxLjEuMw/denonext/rosmsg.mjs": "63e3329c40b9d1383fe8515c3be793a6592ce84b65aa9653bdc627ed97cbac83",
+    "https://esm.sh/@foxglove/rosmsg@5.0.5?deps=@foxglove/cdr@3.5.1,@foxglove/rostime@1.1.3,@foxglove/message-definition@0.5.0": "275fe171a29529aa44dcd65bd0beabf32cf83acc10b69e135e44d54315ef2dfc"
   }
 }

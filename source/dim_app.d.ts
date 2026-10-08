@@ -1,5 +1,6 @@
 // Types for dim_app.js
 import type { AppZenoh, GetZenohOptions, SubscribeOptions } from "./zenoh.d.ts"
+import type { RosCodec, RosDistro } from "./ros.d.ts"
 
 /** The codec module the dimos gateway serves (GET /msgs.js); see its msgs.ts for the per-message types. */
 export interface MsgsModule {
@@ -16,11 +17,15 @@ export interface MsgType<T = unknown> {
 }
 export interface MessageInfo {
     key: string
-    /** "<pkg>.<Type>" from the key, or null */
+    /** "<pkg>.<Type>" from the key (dimos), "pkg/msg/Type" (ROS), or null */
     type: string | null
     receivedAt: number
 }
-export interface DimSubscribeOptions extends SubscribeOptions {
+export interface DimKeySubscribeOptions extends SubscribeOptions {
+    /** decode every sample as this ROS 2 type (CDR), e.g. "std_msgs/msg/String" (for keys that don't name it) */
+    rosType?: string
+}
+export interface DimSubscribeOptions extends DimKeySubscribeOptions {
     /** "<pkg>.<Type>": only that type's key */
     type?: string
 }
@@ -66,6 +71,8 @@ export interface DimAppOptions extends GetZenohOptions {
     msgDecodeEndpoint: string
     /** an already-imported codec module (skips the import) */
     msgs?: MsgsModule
+    /** the standard ROS 2 definitions' version for `app.ros` (default "jazzy") */
+    rosDistro?: RosDistro
 }
 export function dimosKey(topic: string): string
 export class DimApp {
@@ -74,10 +81,18 @@ export class DimApp {
     readonly zenoh: AppZenoh
     readonly msgs: MsgsModule | null
     readonly msgsReady: Promise<MsgsModule | null>
+    /** ROS 2 (CDR) messages; Foxglove's modules load on first use */
+    readonly ros: RosCodec
     subscribe<T = unknown>(
         topic: string,
         callback: (message: T | Uint8Array, info: MessageInfo) => void,
         options?: DimSubscribeOptions,
+    ): DimSubscription
+    /** subscribe() for any key expression; samples whose key/encoding names a ROS type are decoded as CDR */
+    subscribeKey<T = unknown>(
+        key: string,
+        callback: (message: T | Uint8Array, info: MessageInfo) => void,
+        options?: DimKeySubscribeOptions,
     ): DimSubscription
     publish(topic: string, type: string | MsgType, value: unknown): Promise<void>
     publisher(topic: string, type: string | MsgType, options?: Record<string, unknown>): Promise<DimPublisher>

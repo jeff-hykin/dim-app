@@ -71,14 +71,14 @@ export class FakeClient {
         this.state = state
         this.#listeners.forEach((listener) => listener(state))
     }
-    put(key, payload) {
+    put(key, payload, encoding) {
         this.puts.push([key, payload])
         const bytes = payload instanceof Uint8Array
             ? payload
             : new TextEncoder().encode(typeof payload === "string" ? payload : JSON.stringify(payload))
         for (const subscription of this.open()) {
             if (keyMatches(subscription.key, key)) {
-                subscription.callback({ key, bytes, timestamp: 0, seq: 0 })
+                subscription.callback({ key, bytes, timestamp: 0, seq: 0, ...(encoding ? { encoding } : {}) })
             }
         }
     }

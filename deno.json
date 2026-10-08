@@ -1,11 +1,12 @@
 {
     "lint": {
-        "rules": { "exclude": ["no-import-prefix"] }
+        "rules": { "exclude": ["no-import-prefix"] },
+        "exclude": ["source/msgs_fallback.js"]
     },
     "fmt": {
         "indentWidth": 4,
         "semiColons": false,
         "lineWidth": 120,
-        "exclude": ["source/zenoh_gateway_client.js", "*.md", "source/fonts"]
+        "exclude": ["source/zenoh_gateway_client.js", "source/msgs_fallback.js", "*.md", "source/fonts"]
     }
 }
