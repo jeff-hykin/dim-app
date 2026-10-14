@@ -3,7 +3,7 @@
 spec-version: v1.0
 uses:
     "@dimos-gateway":
-        # dim_app.js: DimApp's message codec (msgDecodeEndpoint, e.g. ../../dimos/msgs.js)
+        # dim_app.js: DimApp's message codec (msgDecodeEndpoint, e.g. ../../dimos-gateway/msgs.js)
         - GET /msgs.js
     "@desktop-gateway":
         # desktop.js: listApps/findApp/openApp read the installed apps

@@ -223,7 +223,7 @@ async function quietly(body) {
 Deno.test("DimApp: an endpoint that 404s falls back to the bundled codec, with one debug line and no warning", async () => {
     await withServer(async (base) => {
         await quietly(async (logged) => {
-            await withApp({ msgDecodeEndpoint: `${base}/dimos/msgs.js` }, async (app, client) => {
+            await withApp({ msgDecodeEndpoint: `${base}/dimos-gateway/msgs.js` }, async (app, client) => {
                 assertEquals(typeof app.msgs?.decodeChannel, "function")
                 const seen = []
                 app.subscribe("cmd_vel", (message, info) => seen.push([message, info.type]))

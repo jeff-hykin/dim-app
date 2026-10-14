@@ -11,10 +11,10 @@ const OWN = [/^api\/state\//]
 // the gateway prefixes as source/ writes them (relative to /apps/<name>/ or absolute), and the uses: group they go in
 // (a bare `dimos/...` is a topic key, not a path)
 const GATEWAY_PATH =
-    /(?:(?:\.\.\/)*\/?(?:api|desktop)|(?:\.\.\/|\/)(?:dimos|agent))\/(?:\$\{[^}]*\}|[^\s"'`?)$])*|\/theme\.css/g
+    /(?:(?:\.\.\/)*\/?(?:api|desktop)|(?:\.\.\/|\/)(?:dimos-gateway|agent-gateway))\/(?:\$\{[^}]*\}|[^\s"'`?)$])*|\/theme\.css/g
 const GROUPS = [
-    ["dimos/", "@dimos-gateway"],
-    ["agent/", "@agentic-gateway"],
+    ["dimos-gateway/", "@dimos-gateway"],
+    ["agent-gateway/", "@agentic-gateway"],
     ["", "@desktop-gateway"],
 ]
 

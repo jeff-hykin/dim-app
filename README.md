@@ -14,7 +14,7 @@ vendors them into an app.
 ## Decoding dimos messages: the Desktop's codec endpoint
 
 The dimos gateway (reached through Desktop) serves a codec generated from the installed dimos's own message types:
-`GET /dimos/msgs.js` for pages, `GET /dimos/msgs.ts` for Deno backends. `DimApp` requires you to point at it, and the
+`GET /dimos-gateway/msgs.js`. `DimApp` requires you to point at it, and the
 app must declare it in its `dimos.yaml` (Desktop refuses undeclared calls):
 
 ```yaml
@@ -27,7 +27,7 @@ uses:
 import { DimApp } from "./dim-app/mod.js"
 
 // relative to the page (served at /apps/<name>/), so ../../ is Desktop's root
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
+const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js" })
 app.subscribe("odom", (odom) => console.log(odom.pose.pose.position)) // already decoded
 ```
 
@@ -36,7 +36,7 @@ There is no default: an app without `msgDecodeEndpoint` throws, so every app sta
 ## Frontend (browser)
 
 ```js
-import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/frontend.js"
+import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/frontend.js"
 
 const app = new DimAppFrontend() // connects to new URL("dim-app/ws", location.href)
 app.receiveRequest((kind, payload) => { ... }) // ← backend → us
@@ -46,7 +46,7 @@ app.send("setGoal", 350) // → our backend
 ## Backend (Deno)
 
 ```js
-import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/backend.js"
+import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/backend.js"
 
 const app = new DimAppBackend()
 const ctx = dimContext() // { name, url, path, dataDir, desktopUrl, zenohGatewayUrl, dimosDir, dimosPython, ... }
@@ -89,7 +89,7 @@ Nobody hardcodes `<ns>`: pages get it from `GET ../../api/desktop/zenoh?app=<nam
 import { DimApp } from "./dim-app/source/dim_app.js"
 
 // the dimos gateway's generated codec; declare GET /msgs.js under uses: "@dimos-gateway" in dimos.yaml
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js" })
+const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js" })
 app.subscribe("odom", (odom, { key, type, receivedAt }) => draw(odom.pose.pose)) // dimos/odom/*, decoded
 app.subscribe("camera/image", show, { type: "sensor_msgs.Image", delivery: "reliable" }) // one type, every frame
 const camera = app.subscribe("color_image", show, { maxHz: 10 }) // calling it unsubscribes; it also has .update()
@@ -126,7 +126,7 @@ is the zenoh-gateway client). Other options go to `getZenoh()` (e.g. `connectOpt
 ### Page: ROS 2 messages (CDR) — [ros.js](source/ros.js)
 
 ```js
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos/msgs.js", rosDistro: "jazzy" }) // humble, iron, jazzy (default), kilted, lyrical
+const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js", rosDistro: "jazzy" }) // humble, iron, jazzy (default), kilted, lyrical
 app.subscribeKey("0/chatter/**", (msg, { type }) => log(msg.data)) // rmw_zenoh: the key names the type
 app.subscribeKey("cmd_vel", show, { rosType: "geometry_msgs/msg/Twist" }) // zenoh-bridge-ros2dds: the key doesn't
 const odom = await app.ros.decode("nav_msgs/msg/Odometry", bytes) // or encode(type, value) → CDR bytes
@@ -265,7 +265,7 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
-import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/errors.js"
+import { captureErrors, reportError } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/errors.js"
 
 captureErrors() // uncaught errors + unhandled rejections; DimAppFrontend calls it for you ({ captureErrors: false } opts out)
 reportError("Couldn't save the map", error.stack, { level: "error" }) // handled failures worth knowing about
@@ -298,7 +298,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
-import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/notify.js"
+import { lowLevelAlert, notify } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/notify.js"
 
 notify({ title: "Map saved", body: "office_2f.pgm", kind: "ok" }) // kind: ok | warn | agent | events
 notify({ title: "Robot fell", body: "G1 is down", kind: "warn", sound: "urgent", actions: [["Open", "open_app:g1"]] })
@@ -333,7 +333,7 @@ asks for the password once), and when one fails the user or Desktop's agent fixe
 It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
-import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/shell.js"
+import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/shell.js"
 
 const result = await runShell({
     title: "Fix LAN discovery",
@@ -395,8 +395,8 @@ color), so an app's first frame is already in Desktop's look. `initTheme()` also
 `{type: "dimos-ready"}` to Desktop once the themed page has painted, and Desktop fades the app's frame in.
 
 ```js
-import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/theme.css">
-import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.1/source/theme.js"
+import "./theme.css" // a vendored copy, or <link rel="stylesheet" href="https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/theme.css">
+import { initTheme, onThemeChange, themeColors } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.21.2/source/theme.js"
 
 initTheme() // Desktop's /theme.css, <html data-skin data-corners>, <body class="science [dark]">
 onThemeChange(() => renderer.setClearColor(themeColors().sceneBg)) // canvases + 3D: --scene-bg, --scene-grid, --cat-1..4
