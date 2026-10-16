@@ -63,6 +63,16 @@ export class FakeClient {
     open() {
         return this.subscriptions.filter((subscription) => !subscription.closed)
     }
+    /** every lease() asked for, in order */
+    leases = []
+    lease(options) {
+        this.leases.push(options)
+        return Promise.resolve({
+            group: options.group ?? `#${this.leases.length}`,
+            keys: options.publish ?? [],
+            subscribe: options.subscribe ?? [],
+        })
+    }
     onState(listener) {
         this.#listeners.add(listener)
         return () => this.#listeners.delete(listener)

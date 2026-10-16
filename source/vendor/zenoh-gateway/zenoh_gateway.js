@@ -1,7 +1,7 @@
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // @ts-nocheck
-// https://github.com/jeff-hykin/zenoh-gateway client/zenoh_gateway.ts at 48ad46b (48ad46ba229895b3074dad1fde19bab1eb1d7be7), types stripped by tools/vendor_zenoh_client.js; do not edit
+// https://github.com/jeff-hykin/zenoh-gateway client/zenoh_gateway.ts at e94d71d (e94d71d5106299327663874feb1a11f36607dfdb), types stripped by tools/vendor_zenoh_client.js; do not edit
 // license: ./LICENSE
 // zenoh-gateway browser client: one WebRTC data channel per subscription/publisher, see SPEC.md
 import { decompress as zstdDecompress } from "./vendor/fzstd.js";
@@ -438,11 +438,20 @@ export class Subscription extends Endpoint {
         this.channel = channel;
         this.watchChannel(channel, acceptance);
     }
+    /** Also after it opened: another client's lease took its key, so its channel and track go. */
+    _rejected(reason) {
+        super._rejected(reason);
+        this.channel?.close();
+        this.#releaseTransceiver();
+    }
     close() {
         if (this.closed) {
             return;
         }
         super.close();
+        this.#releaseTransceiver();
+    }
+    #releaseTransceiver() {
         const peer = this.owner._peer;
         if (this.#transceiver && peer) {
             this.owner._releaseTransceiver(peer, this.#transceiver);
@@ -769,19 +778,21 @@ export class Publisher extends Endpoint {
         super.close();
     }
 }
-/** An exclusive right to publish on a group of keys among this gateway's clients (SPEC "Leases"). */
 export class Lease {
     owner;
     group;
     keys;
+    subscribe;
     expiresInMs;
-    /** why it ended: "heartbeat" | "maxSeconds" | "disconnected" | "force-expired by peer N" | "released" */
+    /** why it ended: "takenOver" | "heartbeat" | "maxSeconds" | "disconnected" | "force-expired by peer N" | "released" | "renewed" */
     lost = null;
     #listeners = new Set();
-    constructor(owner, group, keys, expiresInMs) {
+    /** `keys`: the ones only we publish on; `subscribe`: the ones only we subscribe to */
+    constructor(owner, group, keys, subscribe, expiresInMs) {
         this.owner = owner;
         this.group = group;
         this.keys = keys;
+        this.subscribe = subscribe;
         this.expiresInMs = expiresInMs;
     }
     onLost(listener) {
@@ -1295,19 +1306,20 @@ export class ZenohGateway {
         const response = await this._request({ op: "listTopics", key: filter, probeMs }, probeMs + 5000);
         return response.topics;
     }
-    /**
-     * Takes (or renews) the exclusive right to publish on `group`'s keys among this gateway's clients: the
-     * server's group, or `keys` for one it doesn't define. Needs a heartbeat; it ends when the heartbeat
-     * stops, at `maxSeconds`, on disconnect, by `release()` or by force-expiry (`onLost` says which).
-     */
-    async lease(group, { keys, maxSeconds } = {}) {
+    async lease(groupOrOptions, older = {}) {
+        const options = typeof groupOrOptions === "string" ? { group: groupOrOptions, publish: older.keys, maxSeconds: older.maxSeconds } : groupOrOptions;
         if (!this.options.heartbeatHz) {
             throw new Error("zenoh-gateway: a lease needs a heartbeat; connect(url, { heartbeatHz: 5, heartbeatMisses: 3 })");
         }
-        const response = await this._request({ op: "lease", group, keys, maxSeconds }, pingTimeoutMs);
-        const lease = new Lease(this, group, response.keys, response.expiresInMs ?? null);
-        this._leases.get(group)?._lose("renewed");
-        this._leases.set(group, lease);
+        const { group, publish, subscribe, allowTakeover, maxSeconds, onLost } = options;
+        const response = await this._request({ op: "lease", group, publish, subscribe, allowTakeover, maxSeconds }, pingTimeoutMs);
+        const granted = String(response.group);
+        const lease = new Lease(this, granted, response.keys, response.subscribe ?? [], response.expiresInMs ?? null);
+        if (onLost) {
+            lease.onLost(onLost);
+        }
+        this._leases.get(granted)?._lose("renewed");
+        this._leases.set(granted, lease);
         return lease;
     }
     /** Ends another client's lease on `group` (needs the grant's forceExpire right). */
@@ -1368,7 +1380,8 @@ export class ZenohGateway {
         const degraded = bandwidth?.constrained === true;
         this.congestion = {
             degraded,
-            limitedBy: !degraded ? null : number("pageBlockedFraction") > number("networkBlockedFraction") ? "page" : "network",
+            // (the gateway counts the page as part of the path: a page behind on its acks holds sending back like a slow link)
+            limitedBy: degraded ? "network" : null,
             droppedPerSec: seconds > 0 ? dropped / seconds : 0,
             sentBytesPerSec: number("sentBytesPerSec"),
             wantedBytesPerSec: number("demandBytesPerSec"),

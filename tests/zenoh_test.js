@@ -160,6 +160,23 @@ Deno.test("getZenoh: update() changes a lone channel in place; a shared one move
     }
 })
 
+Deno.test("getZenoh: lease() waits for the connection and asks the client for it", async () => {
+    const fake = fakes()
+    const zenoh = getZenoh({ href: "http://h/apps/my-app/", connect: fake.connect, fetch: fake.fetch })
+    try {
+        const onLost = () => {}
+        const lease = await zenoh.lease({ subscribe: ["dimos/**/sensor_msgs.Image"], allowTakeover: true, onLost }) // before connecting
+        assertEquals(fake.clients[0].leases, [{
+            subscribe: ["dimos/**/sensor_msgs.Image"],
+            allowTakeover: true,
+            onLost,
+        }])
+        assertEquals(lease.subscribe, ["dimos/**/sensor_msgs.Image"])
+    } finally {
+        zenoh.close()
+    }
+})
+
 Deno.test("updatedOptions: null removes, encodeOptions merges", () => {
     assertEquals(
         updatedOptions({ maxHz: 10, playoutDelay: [0, 0], encodeOptions: { quality: 50, x: 1 } }, {
