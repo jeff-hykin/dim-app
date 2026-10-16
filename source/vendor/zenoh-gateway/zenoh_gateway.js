@@ -1,7 +1,7 @@
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // @ts-nocheck
-// https://github.com/jeff-hykin/zenoh-gateway client/zenoh_gateway.ts at e94d71d (e94d71d5106299327663874feb1a11f36607dfdb), types stripped by tools/vendor_zenoh_client.js; do not edit
+// https://github.com/jeff-hykin/zenoh-gateway client/zenoh_gateway.ts at 8efd2fe (8efd2feecb6e9bfc446ef0652c6034113cc13644), types stripped by tools/vendor_zenoh_client.js; do not edit
 // license: ./LICENSE
 // zenoh-gateway browser client: one WebRTC data channel per subscription/publisher, see SPEC.md
 import { decompress as zstdDecompress } from "./vendor/fzstd.js";
@@ -786,6 +786,9 @@ export class Lease {
     expiresInMs;
     /** why it ended: "takenOver" | "heartbeat" | "maxSeconds" | "disconnected" | "force-expired by peer N" | "released" | "renewed" */
     lost = null;
+    /** the heartbeat silence that ends it, as the gateway applies it; null: the connection's heartbeat deadline (or a
+     * gateway older than 0.5.17, which ignores `timeoutMs`) */
+    timeoutMs = null;
     #listeners = new Set();
     /** `keys`: the ones only we publish on; `subscribe`: the ones only we subscribe to */
     constructor(owner, group, keys, subscribe, expiresInMs) {
@@ -1311,10 +1314,11 @@ export class ZenohGateway {
         if (!this.options.heartbeatHz) {
             throw new Error("zenoh-gateway: a lease needs a heartbeat; connect(url, { heartbeatHz: 5, heartbeatMisses: 3 })");
         }
-        const { group, publish, subscribe, allowTakeover, maxSeconds, onLost } = options;
-        const response = await this._request({ op: "lease", group, publish, subscribe, allowTakeover, maxSeconds }, pingTimeoutMs);
+        const { group, publish, subscribe, allowTakeover, maxSeconds, timeoutMs, onLost } = options;
+        const response = await this._request({ op: "lease", group, publish, subscribe, allowTakeover, maxSeconds, timeoutMs }, pingTimeoutMs);
         const granted = String(response.group);
         const lease = new Lease(this, granted, response.keys, response.subscribe ?? [], response.expiresInMs ?? null);
+        lease.timeoutMs = response.timeoutMs ?? null;
         if (onLost) {
             lease.onLost(onLost);
         }

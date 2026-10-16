@@ -345,7 +345,7 @@ class AppZenoh {
      * "takenOver". Needs `connectOptions: { heartbeatHz, heartbeatMisses }` (misses / hz ≤ 60 s); leases end on
      * disconnect and are not re-taken after a reconnect.
      * @param {{ group?: string, publish?: string[], subscribe?: string[], allowTakeover?: boolean, maxSeconds?: number,
-     *   onLost?: (reason: string) => void }} options
+     *   timeoutMs?: number, onLost?: (reason: string) => void }} options
      */
     async lease(options) {
         await this.ready

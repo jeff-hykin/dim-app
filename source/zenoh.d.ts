@@ -42,6 +42,8 @@ export interface LeaseOptions {
     /** a newer overlapping lease ends this one ("takenOver") instead of being refused */
     allowTakeover?: boolean
     maxSeconds?: number
+    /** heartbeat silence (ms) that ends it, instead of the connection's deadline (zenoh-gateway ≥ 0.5.17; older ignores it) */
+    timeoutMs?: number
     /** "takenOver" | "heartbeat" | "maxSeconds" | "disconnected" | "force-expired by peer N" | "released" | "renewed" */
     onLost?: (reason: string) => void
 }
@@ -51,6 +53,8 @@ export interface Lease {
     readonly keys: string[]
     readonly subscribe: string[]
     readonly expiresInMs: number | null
+    /** the `timeoutMs` the gateway applied; null: the connection's heartbeat deadline (or a gateway < 0.5.17) */
+    readonly timeoutMs: number | null
     /** why it ended, null while held */
     lost: string | null
     onLost(listener: (reason: string) => void): () => void
