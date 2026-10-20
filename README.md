@@ -159,8 +159,8 @@ zenoh.subscribe("dimos/**", { delivery: "latest" }, onMessage) // any raw key, s
 ```
 
 Every subscription returns its unsubscribe. Discovery and the first connect retry with backoff (0.5 s → 10 s), after
-which the zenoh-gateway client reconnects by itself and re-opens the subscriptions (zenoh-gateway ≥ 0.5.24: a page
-shown again after receiving nothing for `connectOptions.freshAfterMs`, default 2000, replaces its connection at once). The client is vendored
+which the zenoh-gateway client reconnects by itself and re-opens the subscriptions (zenoh-gateway ≥ 0.5.25: a page
+hidden or frozen longer than `connectOptions.freshAfterMs`, default 2000, starts a fresh connection when it comes back). The client is vendored
 ([source/vendor/zenoh-gateway/](source/vendor/zenoh-gateway/), at the commit Desktop's gateway is built from; [tools/vendor_zenoh_client.js](tools/vendor_zenoh_client.js) `<commit>` re-vendors it), so nothing is fetched from
 the network; an app with its own copy passes it: `getZenoh({ connect, connectOptions: { heartbeatHz: 10 } })` (the first
 call's options win, so make that call early).
