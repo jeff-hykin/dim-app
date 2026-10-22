@@ -1,7 +1,6 @@
 # dim-app
 
-The tiny SDK for [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) apps that have a Deno backend: a
-frontend and a backend that message each other, plus popups and privileged commands. No build step; import it by URL.
+The tiny SDK for [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) apps.
 
 The app's server is this repo's [serve.js](source/serve.js): it serves the frontend, runs the backend module in the same
 process, and bridges the two over a websocket at `dim-app/ws`, relative to the app (the SDK's request/answer channel for
