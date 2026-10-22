@@ -10,8 +10,9 @@
 //
 // Where things are comes from Desktop's `GET /gateways/desktop/management/gateways/zenoh?app=<name>` (relative to the
 // app: `../../gateways/desktop/management/gateways/zenoh`). The client is vendor/zenoh-gateway/zenoh_gateway.js
-// (vendored, so nothing loads from the network); an app that already has its own copy passes `connect`. Discovery and connecting retry with backoff (0.5 s doubling to 10 s);
-// once connected the client reconnects by itself and its subscriptions come back on their own.
+// (vendored, so nothing loads from the network); an app that already has its own copy passes `connect`. Discovery and
+// connecting retry with backoff (0.5 s doubling to 10 s); once connected the client reconnects by itself and its
+// subscriptions come back on their own.
 
 import { checkTopic } from "./topic.js"
 
