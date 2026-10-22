@@ -2,25 +2,60 @@
 
 The tiny SDK for [dimOS Desktop](https://github.com/dimensionalOS/dimos-desktop) apps.
 
-The app's server is this repo's [serve.js](source/serve.js): it serves the frontend, runs the backend module in the same
-process, and bridges the two over a websocket at `dim-app/ws`, relative to the app (the SDK's request/answer channel for
-`send`, popups and `sudo`). Pushes to pages that aren't SDK calls go over zenoh (below).
+It's a library: plain ES modules for an app's page (and, optionally, its Deno backend), with no build step. Import it
+by URL, or vendor it into the app. It decodes dimos streams, follows Desktop's theme, and talks to Desktop: notifications,
+the terminal tool, errors for Desktop's agent, insets, opening other apps.
+
+Your app keeps its own server, in any language. dim-app also has an optional ready-made one,
+[serve.js](source/serve.js), for an app whose backend is a Deno module: see
+[Optional: dim-app's own server](#optional-dim-apps-own-server).
 
 Layout: [mod.js](mod.js) re-exports the whole API (`import { DimApp, initTheme } from "./dim-app/mod.js"`); the files
 are in [source/](source), their tests in [tests/](tests) (`deno test -A`), and [tools/vendor.js](tools/vendor.js)
 vendors them into an app.
 
+## Your app's dimos.yaml
+
+Every app has a `dimos.yaml` (Desktop's docs/apps.md has the full spec). `uses:` lists everything the app calls outside
+itself, and Desktop refuses undeclared calls. `provides:` is an OpenAPI 3.1 document of the app's own API: its
+`x-when`s and descriptions are what Desktop's agent and the agents' skill files read, and `x-private` lists what only
+the app's own pages call.
+
+```yaml
+title: My App
+spec-version: v1.3
+uses:
+    "@dimos-gateway":
+        - GET /msgs.js
+    "@zenoh-gateway": ">=0.5 <0.6"
+zenoh: # what the page may read and write through the zenoh-gateway (without this, nothing)
+    default_permission: deny
+    read:
+        - id: odom
+          messages: [declare_subscriber, put]
+          key_exprs: ["dimos/**/geometry_msgs.PoseStamped"]
+          permission: allow
+provides:
+    openapi: 3.1.0
+    info:
+        title: My App
+        version: 1.0.0
+        description: "My App: what it is, in a sentence or two"
+        x-when: you need to do the thing My App does
+    x-private:
+        - api/internal/*
+    paths:
+        /api/status:
+            get:
+                description: What it's doing now. Returns {state, since}.
+                x-when: you need to know what My App is doing
+```
+
 ## Decoding dimos messages: the Desktop's codec endpoint
 
 The dimos gateway (reached through Desktop) serves a codec generated from the installed dimos's own message types:
 `GET /dimos-gateway/msgs.js`. `DimApp` requires you to point at it, and the
-app must declare it in its `dimos.yaml` (Desktop refuses undeclared calls):
-
-```yaml
-uses:
-    "@dimos-gateway":
-        - GET /msgs.js
-```
+app must declare it under `uses:` in its `dimos.yaml` (`"@dimos-gateway": [GET /msgs.js]`, as above).
 
 ```js
 import { DimApp } from "./dim-app/mod.js"
@@ -32,7 +67,15 @@ app.subscribe("odom", (odom) => console.log(odom.pose.pose.position)) // already
 
 There is no default: an app without `msgDecodeEndpoint` throws, so every app states the endpoint it depends on.
 
-## Frontend (browser)
+## Optional: dim-app's own server
+
+If your app's backend is a Deno module, dim-app can be the whole server: [serve.js](source/serve.js) serves the
+frontend, runs the backend module in the same process, and bridges the two over a websocket at `dim-app/ws`, relative to
+the app (the request/answer channel for `send`, popups and `sudo`). `mkDimosApp` in this repo's flake builds it for
+Desktop ([Building it for Desktop](#building-it-for-desktop)). Pushes to pages that aren't SDK calls go over zenoh
+(below). The rest of this README works with or without it.
+
+### Frontend (browser)
 
 ```js
 import { DimAppFrontend } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.22.1/source/frontend.js"
@@ -42,7 +85,7 @@ app.receiveRequest((kind, payload) => { ... }) // ← backend → us
 app.send("setGoal", 350) // → our backend
 ```
 
-## Backend (Deno)
+### Backend (Deno)
 
 ```js
 import { DimAppBackend, dimContext } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.22.1/source/backend.js"
@@ -443,12 +486,13 @@ a password prompt with the exact command, then the server runs it with `sudo -S`
 
 ## Building it for Desktop
 
-Desktop builds every app with `nix build .#dimosApp`. This repo's flake makes that output from an SDK app:
+Desktop builds every app with `nix build .#dimosApp`. For an app using dim-app's own server, this repo's flake makes
+that output (an app with its own server writes its own `dimosApp`):
 
 ```nix
 {
     inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.7.0";
+    inputs.dim-app.url = "github:jeff-hykin/dim-app/v0.22.3";
     outputs = { self, nixpkgs, dim-app }: {
         packages = dim-app.lib.forAllSystems nixpkgs (pkgs: {
             dimosApp = dim-app.lib.mkDimosApp {
