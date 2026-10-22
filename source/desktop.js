@@ -60,7 +60,7 @@ export async function listApps({ fresh = false } = {}) {
         return appsCache
     }
     try {
-        const response = await fetch("/apps")
+        const response = await fetch("/gateways/desktop/info/apps")
         const body = await response.json()
         const list = Array.isArray(body) ? body : body.apps ?? []
         appsCache = list

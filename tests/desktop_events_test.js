@@ -17,7 +17,7 @@ Deno.test("onDesktopEvent (Deno): typed + '*' subscriptions, reconnects after th
     let connections = 0
     const encoder = new TextEncoder()
     const server = Deno.serve({ port: 0, onListen() {} }, (request) => {
-        assertEquals(new URL(request.url).pathname, "/api/events")
+        assertEquals(new URL(request.url).pathname, "/gateways/desktop/ui/events")
         connections += 1
         const first = connections === 1
         const body = new ReadableStream({

@@ -10,7 +10,7 @@ const VENDORED = ["msgs_fallback.js"]
 const OWN = [/^api\/state\//]
 // Desktop's top level, which no `uses:` group holds: its page (openApp's /?app=), the installed apps, the theme, the
 // deprecated SSE fallback
-const TOP_LEVEL = ["", "apps", "theme.css", "api/events"]
+const TOP_LEVEL = ["", "theme.css"]
 // paths as source/ writes them (relative to /apps/<name>/ or absolute): the gateways', and any old Desktop path
 // (a bare `dimos/...` is a topic key, not a path)
 const GATEWAY_PATH =
