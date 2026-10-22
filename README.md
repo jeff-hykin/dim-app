@@ -348,8 +348,9 @@ ignore them) are Desktop's docs/api.md "Notification actions and modals". A Deno
 
 [shell.js](source/shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
 shows them over the app with a note for each, nothing runs until the user presses Run, they run in one terminal (sudo
-asks for the password once), and when one fails the user or Desktop's agent fixes it in that terminal and retries it.
-It resolves when the session ends; outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
+asks for the password once), and when one fails the user or Desktop's agent fixes it in that terminal, then retries it,
+marks it done or skips it. It resolves when the session ends (`succeeded`, `failed` or `cancelled`, also when nobody
+presses Run within `timeout`); outside Desktop it resolves to `{ status: "unavailable" }` without running anything.
 
 ```js
 import { runCommand, runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.22.1/source/shell.js"
@@ -368,7 +369,8 @@ const one = await runCommand("id -u", { title: "Who am I", needsStdout: true }) 
 
 `needsStdout` pipes the command's output through `tee`, so it sees pipes instead of a terminal (no progress bars); such
 a command always runs again after a fix, so its stdout is the real one. A Deno backend passes Desktop's URL and its own
-name: `runShell({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`.
+name: `runShell({ ..., app: "my_app" }, { origin: dimContext().desktopUrl })`. A command can also take `cwd` and `env`;
+options take `onUpdate(session)` (each poll) and an AbortSignal `signal` (cancels the session).
 
 ## Theme: Desktop's /theme.css
 
