@@ -8,17 +8,21 @@ const repo = new URL("../", import.meta.url)
 const VENDORED = ["msgs_fallback.js"]
 // an app's own endpoints (the consuming app serves them), not a gateway's
 const OWN = [/^api\/state\//]
-// the gateway prefixes as source/ writes them (relative to /apps/<name>/ or absolute), and the uses: group they go in
+// Desktop's top level, which no `uses:` group holds: its page (openApp's /?app=), the installed apps, the theme, the
+// deprecated SSE fallback
+const TOP_LEVEL = ["", "apps", "theme.css", "api/events"]
+// paths as source/ writes them (relative to /apps/<name>/ or absolute): the gateways', and any old Desktop path
 // (a bare `dimos/...` is a topic key, not a path)
 const GATEWAY_PATH =
-    /(?:(?:\.\.\/)*\/?(?:api|desktop)|(?:\.\.\/|\/)(?:dimos-gateway|agent-gateway))\/(?:\$\{[^}]*\}|[^\s"'`?)$])*|\/theme\.css/g
+    /(?:(?:\.\.\/)*\/?(?:api|desktop|gateways)|(?:\.\.\/|\/)(?:dimos-gateway|agent-gateway))\/(?:\$\{[^}]*\}|[^\s"'`?):$])*|"\/apps"|\/theme\.css/g
+// spec v1.4: each group's paths are relative to its gateway's prefix
 const GROUPS = [
-    ["dimos-gateway/", "@dimos-gateway"],
-    ["agent-gateway/", "@agentic-gateway"],
-    ["", "@desktop-gateway"],
+    ["gateways/dimos/", "@dimos-gateway"],
+    ["gateways/agent/", "@agentic-gateway"],
+    ["gateways/desktop/", "@desktop-gateway"],
 ]
 
-/** `/api/x/${id}` and `/api/x/{id}` → `/api/x/{}` */
+/** `/ui/x/${id}` and `/ui/x/{id}` → `/ui/x/{}` */
 const shape = (path) => path.replace(/\$\{[^}]*\}|\{[^}]*\}/g, "{}")
 
 const yaml = parse(await Deno.readTextFile(new URL("dimos.yaml", repo)))
@@ -32,12 +36,13 @@ for (const [group, value] of Object.entries(yaml.uses ?? {})) {
 
 const used = new Map() // `group path` → where
 let usesZenoh = false
+const old = [] // Desktop's pre-v1.4 paths (/api/..., /desktop/..., /dimos-gateway/...): Desktop warns on each
 for await (const entry of Deno.readDir(new URL("source/", repo))) {
     if (!entry.name.endsWith(".js") || VENDORED.includes(entry.name)) {
         continue
     }
     let text = await Deno.readTextFile(new URL(`source/${entry.name}`, repo))
-    // `const path = \`/api/...\`` then `${path}/cancel`: put the literal in
+    // `const path = \`/gateways/...\`` then `${path}/cancel`: put the literal in
     for (const [, name, literal] of text.matchAll(/const (\w+) = [`"]([^`"]*)[`"]/g)) {
         text = text.replaceAll("${" + name + "}", literal)
     }
@@ -52,20 +57,29 @@ for await (const entry of Deno.readDir(new URL("source/", repo))) {
             found.push("/") // Desktop's page: openApp's /?app=<id>
         }
         for (const raw of found) {
-            const path = raw.replace(/^(\.\.\/)+/, "").replace(/^\//, "")
-            if (OWN.some((own) => own.test(path))) {
+            const path = raw.replace(/^"|"$/g, "").replace(/^(\.\.\/)+/, "").replace(/^\//, "")
+            if (OWN.some((own) => own.test(path)) || TOP_LEVEL.includes(path)) {
                 continue
             }
-            const [prefix, group] = GROUPS.find(([prefix]) => path.startsWith(prefix))
+            const match = GROUPS.find(([prefix]) => path.startsWith(prefix))
+            if (!match) {
+                old.push(`/${path} (source/${entry.name}:${index + 1})`)
+                continue
+            }
+            const [prefix, group] = match
             const key = `${group} ${shape("/" + path.slice(prefix.length))}`
             used.set(key, used.get(key) ?? `source/${entry.name}:${index + 1}`)
         }
     })
 }
 
-Deno.test("dimos.yaml: spec-version v1.0, uses: only (a library: no provides, nix or start)", () => {
-    assertEquals(yaml["spec-version"], "v1.0")
+Deno.test("dimos.yaml: spec-version v1.4, uses: only (a library: no provides, nix or start)", () => {
+    assertEquals(yaml["spec-version"], "v1.4")
     assertEquals(Object.keys(yaml).sort(), ["spec-version", "uses"])
+})
+
+Deno.test("source/ calls only Desktop's current paths (no /api/..., /desktop/..., /dimos-gateway/...)", () => {
+    assertEquals(old, [], "move these to their /gateways/... path")
 })
 
 Deno.test("dimos.yaml: every endpoint source/ calls is in uses:", () => {

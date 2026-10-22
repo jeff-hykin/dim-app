@@ -67,7 +67,7 @@ export interface DimSubscription {
     update(changes: SubscriptionUpdate): Promise<void>
 }
 export interface DimAppOptions extends GetZenohOptions {
-    /** the codec module's URL, relative to the page or absolute, e.g. "../../dimos-gateway/msgs.js" */
+    /** the codec module's URL, relative to the page or absolute, e.g. "../../gateways/dimos/msgs.js" */
     msgDecodeEndpoint: string
     /** an already-imported codec module (skips the import) */
     msgs?: MsgsModule

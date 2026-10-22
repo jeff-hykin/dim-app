@@ -29,10 +29,13 @@ Deno.test("runShell posts the request, then polls until it finishes", async () =
         assertEquals(updates, ["pending", "succeeded"])
         assertEquals(desktop.seen[0], [
             "POST",
-            "http://127.0.0.1:7000/api/desktop/shell",
+            "http://127.0.0.1:7000/gateways/desktop/ui/shell",
             { title: "Who", app: "my_app", commands: [{ run: "id -u", needsStdout: true }] },
         ])
-        assertEquals(desktop.seen[1].slice(0, 2), ["GET", "http://127.0.0.1:7000/api/desktop/shell/sh-1?wait=25"])
+        assertEquals(desktop.seen[1].slice(0, 2), [
+            "GET",
+            "http://127.0.0.1:7000/gateways/desktop/ui/shell/sh-1?wait=25",
+        ])
     } finally {
         desktop.restore()
     }

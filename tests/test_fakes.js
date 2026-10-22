@@ -143,7 +143,7 @@ export function fakes({ failConnects = 0, failDiscovery = 0, routes = {} } = {})
         fetch: async (url) => {
             fetched.push(String(url))
             const path = new URL(url).pathname
-            if (path.endsWith("/api/desktop/zenoh")) {
+            if (path.endsWith("/gateways/desktop/management/gateways/zenoh")) {
                 if (failDiscovery-- > 0) {
                     return new Response("starting", { status: 503 })
                 }

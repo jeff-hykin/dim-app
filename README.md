@@ -17,16 +17,19 @@ vendors them into an app.
 ## Your app's dimos.yaml
 
 Every app has a `dimos.yaml` (Desktop's docs/apps.md has the full spec). `uses:` lists everything the app calls outside
-itself, and Desktop refuses undeclared calls. `provides:` is an OpenAPI 3.1 document of the app's own API: its
-`x-when`s and descriptions are what Desktop's agent and the agents' skill files read, and `x-private` lists what only
-the app's own pages call.
+itself (each gateway's paths relative to it, e.g. `"@desktop-gateway"` under `/gateways/desktop/`), and
+Desktop refuses undeclared calls. dim-app's own [dimos.yaml](dimos.yaml) lists what each helper calls.
+`provides:` is an OpenAPI 3.1 document of the app's own API: its `x-when`s and descriptions are what Desktop's agent and
+the agents' skill files read, and `x-private` lists what only the app's own pages call.
 
 ```yaml
 title: My App
-spec-version: v1.3
+spec-version: v1.4
 uses:
-    "@dimos-gateway":
+    "@dimos-gateway": # paths relative to /gateways/dimos/
         - GET /msgs.js
+    "@desktop-gateway": # paths relative to /gateways/desktop/
+        - POST /ui/notifications
     "@zenoh-gateway": ">=0.5 <0.6"
 zenoh: # what the page may read and write through the zenoh-gateway (without this, nothing)
     default_permission: deny
@@ -54,14 +57,14 @@ provides:
 ## Decoding dimos messages: the Desktop's codec endpoint
 
 The dimos gateway (reached through Desktop) serves a codec generated from the installed dimos's own message types:
-`GET /dimos-gateway/msgs.js`. `DimApp` requires you to point at it, and the
+`GET /gateways/dimos/msgs.js`. `DimApp` requires you to point at it, and the
 app must declare it under `uses:` in its `dimos.yaml` (`"@dimos-gateway": [GET /msgs.js]`, as above).
 
 ```js
 import { DimApp } from "./dim-app/mod.js"
 
 // relative to the page (served at /apps/<name>/), so ../../ is Desktop's root
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js" })
+const app = new DimApp({ msgDecodeEndpoint: "../../gateways/dimos/msgs.js" })
 app.subscribe("odom", (odom) => console.log(odom.pose.pose.position)) // already decoded
 ```
 
@@ -122,7 +125,7 @@ again when its zenoh-gateway connection comes back.
 
 Keys: an app's frontend topics are `<ns>/apps/<name>/frontend/<topic…>` (`<name>` = the install name); Desktop's events
 are `<ns>/desktop/events/<type>`, its jobs `<ns>/desktop/jobs/<id>`, the dimos server's `<ns>/dimos/events/<type>`.
-Nobody hardcodes `<ns>`: pages get it from `GET ../../api/desktop/zenoh?app=<name>`, backends from `DIMOS_APP`
+Nobody hardcodes `<ns>`: pages get it from `GET ../../gateways/desktop/management/gateways/zenoh?app=<name>`, backends from `DIMOS_APP`
 (`zenohNamespace`, `zenohPrefix`).
 
 ### Page: dimos streams, decoded — [dim_app.js](source/dim_app.js) (start here)
@@ -131,7 +134,7 @@ Nobody hardcodes `<ns>`: pages get it from `GET ../../api/desktop/zenoh?app=<nam
 import { DimApp } from "./dim-app/source/dim_app.js"
 
 // the dimos gateway's generated codec; declare GET /msgs.js under uses: "@dimos-gateway" in dimos.yaml
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js" })
+const app = new DimApp({ msgDecodeEndpoint: "../../gateways/dimos/msgs.js" })
 app.subscribe("odom", (odom, { key, type, receivedAt }) => draw(odom.pose.pose)) // dimos/odom/*, decoded
 app.subscribe("camera/image", show, { type: "sensor_msgs.Image", delivery: "reliable" }) // one type, every frame
 const camera = app.subscribe("color_image", show, { maxHz: 10 }) // calling it unsubscribes; it also has .update()
@@ -168,7 +171,7 @@ is the zenoh-gateway client). Other options go to `getZenoh()` (e.g. `connectOpt
 ### Page: ROS 2 messages (CDR) — [ros.js](source/ros.js)
 
 ```js
-const app = new DimApp({ msgDecodeEndpoint: "../../dimos-gateway/msgs.js", rosDistro: "jazzy" }) // humble, iron, jazzy (default), kilted, lyrical
+const app = new DimApp({ msgDecodeEndpoint: "../../gateways/dimos/msgs.js", rosDistro: "jazzy" }) // humble, iron, jazzy (default), kilted, lyrical
 app.subscribeKey("0/chatter/**", (msg, { type }) => log(msg.data)) // rmw_zenoh: the key names the type
 app.subscribeKey("cmd_vel", show, { rosType: "geometry_msgs/msg/Twist" }) // zenoh-bridge-ros2dds: the key doesn't
 const odom = await app.ros.decode("nav_msgs/msg/Odometry", bytes) // or encode(type, value) → CDR bytes
@@ -249,13 +252,13 @@ arrive in the order they were published); `onOpen` runs on connect and every rec
 ```js
 import { publishFrontend, stateChanged } from "./dim-app/source/frontend_publish.js"
 
-publishFrontend("status", { battery: 0.82 }) // POST <desktopUrl>/desktop/frontend/<name>/status
+publishFrontend("status", { battery: 0.82 }) // POST <desktopUrl>/gateways/desktop/ui/apps/<name>/frontend/status
 publishFrontend("events", { type: "saved", id }) // what the page's appEvents() hears
 publishFrontend("map/png", bytes, { contentType: "image/png", ordered: false }) // bytes; unordered = sent at once
 stateChanged("recordings") // {key, version} on state/recordings → useBackendState("recordings") re-GETs
 ```
 
-Any language can do the same with one HTTP call to Desktop's relay, `POST /desktop/frontend/<name>/<topic…>` (body as
+Any language can do the same with one HTTP call to Desktop's relay, `POST /gateways/desktop/ui/apps/<name>/frontend/<topic…>` (body as
 is, its content-type becomes the sample's encoding; ≤ 1 MiB, events should stay ≤ 64 KiB: put an id in the event and
 serve the bytes over HTTP). A backend that links zenoh (Rust, C++, Python) may publish on
 `DIMOS_APP.zenohPrefix + "/frontend/<topic>"` directly. The relay's topic chunks are letters, digits, `-`, `_`, `.`.
@@ -321,8 +324,8 @@ React: `<EmptyState layer title=… actions=… />` and `useAppInstalled(id)` fr
 
 ## Errors → Desktop's agent
 
-[errors.js](source/errors.js) sends a page's errors to Desktop's error feed (`POST /api/errors`, relative to the app:
-`../../api/errors`), where a connected agent sees them (its `recent_errors` tool; the newest unacknowledged ones are in
+[errors.js](source/errors.js) sends a page's errors to Desktop's error feed (`POST /gateways/desktop/ui/errors`, relative to the app:
+`../../gateways/desktop/ui/errors`), where a connected agent sees them (its `recent_errors` tool; the newest unacknowledged ones are in
 `desktop_context`), so "it broke" comes with the error.
 
 ```js
@@ -355,7 +358,7 @@ const off = onDesktopEvent("endpoints", ({ app, added, removed }) => {
 
 ## Notifications → Desktop's notification center
 
-[notify.js](source/notify.js) posts to Desktop's `POST /api/notifications` (an absolute path: apps share Desktop's origin under
+[notify.js](source/notify.js) posts to Desktop's `POST /gateways/desktop/ui/notifications` (an absolute path: apps share Desktop's origin under
 `/apps/<name>/`). Outside Desktop it does nothing and resolves to null; it never throws.
 
 ```js
@@ -388,7 +391,7 @@ ignore them) are Desktop's docs/api.md "Notification actions and modals". A Deno
 
 ## Terminal tool: run a shell command (sudo too) in Desktop
 
-[shell.js](source/shell.js) asks Desktop to run shell commands (`POST /api/desktop/shell`, Desktop's docs/shell.md). Desktop
+[shell.js](source/shell.js) asks Desktop to run shell commands (`POST /gateways/desktop/ui/shell`, Desktop's docs/shell.md). Desktop
 shows them over the app with a note for each, nothing runs until the user presses Run, they run in one terminal (sudo
 asks for the password once), and when one fails the user or Desktop's agent fixes it in that terminal, then retries it,
 marks it done or skips it. It resolves when the session ends (`succeeded`, `failed` or `cancelled`, also when nobody

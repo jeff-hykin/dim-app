@@ -1,5 +1,5 @@
-// Shell commands (sudo ones too) run through dimOS Desktop (POST /api/desktop/shell, Desktop's docs/shell.md). Desktop
-// shows the commands over the app and nothing runs until the user presses Run; they run in one terminal, so sudo asks
+// Shell commands (sudo ones too) run through dimOS Desktop (POST /gateways/desktop/ui/shell, Desktop's docs/shell.md).
+// Desktop shows the commands over the app and nothing runs until the user presses Run; they run in one terminal, so sudo asks
 // for the password once; when one fails, the user or Desktop's agent fixes it in that terminal and retries it.
 //
 //     import { runShell } from "https://esm.sh/gh/jeff-hykin/dim-app@v0.18.0/source/shell.js"
@@ -68,8 +68,8 @@ export async function runShell(request, options = {}) {
     }
     const origin = options.origin ?? location.origin
     const app = request.app ?? appName() ?? undefined
-    const { id } = await call(origin, "POST", "/api/desktop/shell", { ...request, app })
-    const path = `/api/desktop/shell/${encodeURIComponent(id)}`
+    const { id } = await call(origin, "POST", "/gateways/desktop/ui/shell", { ...request, app })
+    const path = `/gateways/desktop/ui/shell/${encodeURIComponent(id)}`
     const cancel = () => call(origin, "POST", `${path}/cancel`).catch(() => {})
     options.signal?.addEventListener("abort", cancel, { once: true })
     try {

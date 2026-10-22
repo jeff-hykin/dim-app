@@ -26,9 +26,9 @@ Deno.test("publishFrontend: POSTs to the relay as JSON, bytes or text, in order"
             publishFrontend("log", "hi", { app, contentType: "text/plain" }),
         ])
         assertEquals(got.map((g) => g.path), [
-            "/desktop/frontend/my-app/status",
-            "/desktop/frontend/my-app/map/cloud",
-            "/desktop/frontend/my-app/log",
+            "/gateways/desktop/ui/apps/my-app/frontend/status",
+            "/gateways/desktop/ui/apps/my-app/frontend/map/cloud",
+            "/gateways/desktop/ui/apps/my-app/frontend/log",
         ])
         assertEquals(got.map((g) => g.type), ["application/json", "application/octet-stream", "text/plain"])
         assertEquals(new TextDecoder().decode(got[0].body), '{"battery":0.8}')
@@ -62,9 +62,9 @@ Deno.test("stateChanged: {key, version} on state/<key>, versions only grow", asy
         await stateChanged("other", 3, { app })
         const bodies = got.map((g) => JSON.parse(new TextDecoder().decode(g.body)))
         assertEquals(got.map((g) => g.path), [
-            "/desktop/frontend/my-app/state/things",
-            "/desktop/frontend/my-app/state/things",
-            "/desktop/frontend/my-app/state/other",
+            "/gateways/desktop/ui/apps/my-app/frontend/state/things",
+            "/gateways/desktop/ui/apps/my-app/frontend/state/things",
+            "/gateways/desktop/ui/apps/my-app/frontend/state/other",
         ])
         assertEquals(bodies[1].version > bodies[0].version, true)
         assertEquals(bodies[0].version >= Date.now() - 10_000, true)

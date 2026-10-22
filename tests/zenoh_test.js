@@ -28,7 +28,7 @@ Deno.test("getZenoh: one shared connection, discovery with ?app, keys under the 
         zenoh.subscribeDesktop("apps", (event) => seen.push(["apps", event]))
         zenoh.subscribeDimos("*", (event) => seen.push(["dimos", event]))
         await zenoh.ready
-        assertEquals(fake.fetched[0], "http://h:7341/api/desktop/zenoh?app=my-app")
+        assertEquals(fake.fetched[0], "http://h:7341/gateways/desktop/management/gateways/zenoh?app=my-app")
         assertEquals(fake.clients.length, 1)
         assertEquals(fake.clients[0].url, "http://h:7341/zenoh-gateway")
         assertEquals(zenoh.namespace, INFO.namespace)

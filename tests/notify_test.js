@@ -7,7 +7,7 @@ Deno.test("notify outside Desktop resolves to null without fetching", async () =
     assertEquals(await notify({ title: "x", body: "y" }), null)
 })
 
-Deno.test("notify posts the payload to <origin>/api/notifications", async () => {
+Deno.test("notify posts the payload to <origin>/gateways/desktop/ui/notifications", async () => {
     const seen = []
     const realFetch = globalThis.fetch
     globalThis.fetch = (url, init) => {
@@ -23,9 +23,9 @@ Deno.test("notify posts the payload to <origin>/api/notifications", async () => 
             app: "controller",
         }, { origin: "http://127.0.0.1:7000" })
         assertEquals(id, 7)
-        assertEquals(seen[0][0], "http://127.0.0.1:7000/api/notifications")
+        assertEquals(seen[0][0], "http://127.0.0.1:7000/gateways/desktop/ui/notifications")
         assertEquals(seen[0][1].sound, "battery")
-        assertEquals(seen[0][1].icon, "/api/apps/controller/icon")
+        assertEquals(seen[0][1].icon, "/gateways/desktop/info/apps/controller/icon")
         assertEquals(seen[0][1].modals, undefined)
         const modals = { details: { body: "**boom**", pre: "log", copy: true, actions: [["Close", "close"]] } }
         await notify({ title: "x", actions: [["Show details", "modal:details"]], modals, app: "c" }, {
