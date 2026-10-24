@@ -20,7 +20,8 @@ Every app has a `dimos.yaml` (Desktop's docs/apps.md has the full spec). `uses:`
 itself (each gateway's paths relative to it, e.g. `"@desktop-gateway"` under `/gateways/desktop/`), and
 Desktop refuses undeclared calls (403 at runtime). dim-app's own [dimos.yaml](dimos.yaml) lists what each helper
 calls, so copy the lines for the helpers you use: `GET /msgs.js` for `DimApp`, `GET /history/recordings` for
-`recordingsDir()`, `POST /ui/notifications` + `GET /info/apps/{pkg}/icon` for `notify()`, and so on.
+`recordingsDir()`, `GET /config` (+ `"@zenoh-gateway"` to watch it) for `sharedConfig()`,
+`POST /ui/notifications` + `GET /info/apps/{pkg}/icon` for `notify()`, and so on.
 `provides:` is an OpenAPI 3.1 document of the app's own API: its `x-when`s and descriptions are what Desktop's agent and
 the agents' skill files read, and `x-private` lists what only the app's own pages call.
 
@@ -102,6 +103,54 @@ guess at, and the wrong one writes recordings where nothing looks for them. A pa
 Before v0.24.0 `DIMOS_APP` carried a `recordingsDir` as well. Two answers to one question is how they drifted apart (a
 recording made from Desktop landed in the dimos checkout while the Recordings app looked somewhere else), so the field
 is gone and this is its replacement.
+
+`sharedConfig().recordingsDir` ([below](#the-shared-dimos-config-ask-the-gateway-and-it-says-when-it-changed)) is that
+same resolved directory, so an app already asking for the config doesn't need `recordingsDir()` too; an app that only
+wants the folder keeps this one and doesn't have to declare `GET /config`.
+
+## The shared dimos config: ask the gateway, and it says when it changed
+
+The machine's dimos settings live in `$DIMOS_HOME/config.yaml` (`~/.dimos/config.yaml`), and the dimos gateway is the
+one thing that reads it: `GET /gateways/dimos/config` answers `{"path": "<the file>", "recordingsDir": "<dir>"}`,
+resolved exactly the way every dimos process resolves it (`dimos.utils.shared_config`), so a `dimos run` in a terminal
+and an app agree. Nothing reads the file, and nothing does a blocking HTTP call per read either: the gateway watches the
+file and publishes `{"type": "config"}` on `<ns>/dimos/events/config` — a **bust signal with no values in it**, so a
+listener's cache and the event can never say different things. [config.js](source/config.js) is both halves:
+
+```js
+import { sharedConfig, watchSharedConfig } from "./dim-app/mod.js"
+
+const config = await sharedConfig() // { path: "/home/you/.dimos/config.yaml", recordingsDir: "…" } — cached
+const stop = watchSharedConfig((config) => render(config)) // the config now, and again on every change
+watchSharedConfig() // no callback: the same subscription, keeping sharedConfig()'s cache honest for the whole app
+```
+
+The app must declare the read under `uses:` in its `dimos.yaml`, and `"@zenoh-gateway"` as well if it watches, or
+Desktop refuses the calls with a 403:
+
+```yaml
+uses:
+    "@dimos-gateway":
+        - GET /config
+    "@zenoh-gateway": ">=0.5.1" # watchSharedConfig only
+```
+
+**A cache nobody watches is never invalidated.** With no `watchSharedConfig` running, `sharedConfig()` keeps its first
+answer until `{ fresh: true }` — the only thing that knows the file changed is the event. The watcher also re-asks after
+a reconnect, because events published while the link was down are gone.
+
+The live half is why this is opt-in by that one call: `config.js` has no top-level `import` of
+[zenoh.js](source/zenoh.js) and loads it lazily, so `sharedConfig()` on its own is the same one-file add as
+[recordings.js](source/recordings.js) — copy `config.js` and nothing else and it works. In a Deno backend (no
+zenoh-gateway there) subscribing fails, `onError` says so, and the cache is left a plain cache; a backend that has to be
+sure asks with `{ fresh: true }`.
+
+A `path` is not something to guess at, so with no answer at all `sharedConfig()` **throws** (a 403 says to add the line
+above), the same call as `recordingsDir()` makes for the same kind of answer. Once there is an answer, a failed re-ask
+does not take it away: the last one stands, stale, and the call after that asks again, because a gateway blip shouldn't
+turn a working app into a broken one. `sharedConfig({ fresh: true })` is the strict read that throws instead — use it
+right before writing somewhere the config names, where a path that has since moved is worse than no answer.
+`watchSharedConfig` never throws; its failures go to `onError` (default: `console.debug`).
 
 ## Optional: dim-app's own server
 
@@ -380,7 +429,8 @@ is throttled (the same message at most once per 10 s, at most 20 a minute). Desk
 `getZenoh().subscribeDesktop(type, callback)` (`<ns>/desktop/events/<type>`: `apps`, `endpoints`, `endpoint-stats`,
 `blueprints`, `runs`, `recordings`, `notification`, `notifications`, `ui-settings`, `job`, `error`, `launcher`, …; see
 Desktop's docs/events.md for each payload), on the page's one zenoh-gateway connection; `onDimosEvent(type, callback)` is
-the dimos server's, and `onDesktopReconnect(callback)` says when to re-GET. In a Deno backend (no zenoh-gateway there) it
+the dimos server's (`launch`, `blueprints`, `uploads`, `upload`, `upload-removed`, `cloud-login`, `cloud-account`,
+`config`), and `onDesktopReconnect(callback)` says when to re-GET. In a Deno backend (no zenoh-gateway there) it
 still reads Desktop's `GET /api/events` stream from `DIMOS_APP`'s `desktopUrl`, which Desktop keeps, deprecated, for one
 release.
 

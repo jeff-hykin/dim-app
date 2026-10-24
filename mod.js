@@ -11,6 +11,7 @@ export { readDimosApp } from "./source/app_env.js"
 export { DimAppBackend, dimContext } from "./source/backend.js"
 export { DimAppFrontend, VERSION } from "./source/frontend.js"
 export { resolveSource, watchBackendState } from "./source/backend_state.js"
+export { CONFIG_EVENT, sharedConfig, watchSharedConfig } from "./source/config.js"
 export {
     appInstalled,
     BUILTIN_APPS,

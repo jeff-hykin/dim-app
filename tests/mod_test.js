@@ -13,6 +13,8 @@ Deno.test("mod.js: loads in Deno and re-exports the source files' API", () => {
         "initTheme",
         "notify",
         "recordingsDir",
+        "sharedConfig",
+        "watchSharedConfig",
         "runShell",
         "openApp",
         "appEvents",
