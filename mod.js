@@ -26,6 +26,7 @@ export { captureErrors, reportError } from "./source/errors.js"
 export { appEvents, EVENTS_TOPIC } from "./source/events.js"
 export { publishFrontend, stateChanged } from "./source/frontend_publish.js"
 export { lowLevelAlert, notify } from "./source/notify.js"
+export { recordingsDir } from "./source/recordings.js"
 export { runCommand, runShell } from "./source/shell.js"
 export {
     corners,

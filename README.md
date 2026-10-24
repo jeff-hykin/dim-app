@@ -18,7 +18,9 @@ vendors them into an app.
 
 Every app has a `dimos.yaml` (Desktop's docs/apps.md has the full spec). `uses:` lists everything the app calls outside
 itself (each gateway's paths relative to it, e.g. `"@desktop-gateway"` under `/gateways/desktop/`), and
-Desktop refuses undeclared calls. dim-app's own [dimos.yaml](dimos.yaml) lists what each helper calls.
+Desktop refuses undeclared calls (403 at runtime). dim-app's own [dimos.yaml](dimos.yaml) lists what each helper
+calls, so copy the lines for the helpers you use: `GET /msgs.js` for `DimApp`, `GET /history/recordings` for
+`recordingsDir()`, `POST /ui/notifications` + `GET /info/apps/{pkg}/icon` for `notify()`, and so on.
 `provides:` is an OpenAPI 3.1 document of the app's own API: its `x-when`s and descriptions are what Desktop's agent and
 the agents' skill files read, and `x-private` lists what only the app's own pages call.
 
@@ -70,6 +72,37 @@ app.subscribe("odom", (odom) => console.log(odom.pose.pose.position)) // already
 
 There is no default: an app without `msgDecodeEndpoint` throws, so every app states the endpoint it depends on.
 
+## Where recordings are kept: ask the dimos gateway
+
+The dimos gateway is the one thing that knows: `GET /gateways/dimos/history/recordings` answers `{"path": "<dir>"}`, and
+every launch is handed that same folder (`--record-dir`), so what it says and what a run writes to can't drift apart.
+[recordings.js](source/recordings.js):
+
+```js
+import { recordingsDir } from "./dim-app/mod.js"
+
+const dir = await recordingsDir() // "/home/you/.dimos/recordings"
+const same = await recordingsDir({ origin: dimContext().desktopUrl }) // from a Deno backend: it has no page URL
+```
+
+The app must declare the call under `uses:` in its `dimos.yaml` or Desktop refuses it with a 403:
+
+```yaml
+uses:
+    "@dimos-gateway":
+        - GET /history/recordings
+```
+
+It asks once per Desktop and keeps the answer for the life of the page (or the process), so calling it wherever you need
+the folder is free; a failed ask isn't kept, and `{ fresh: true }` asks again. Unlike the other helpers it **throws**
+when the gateway can't be reached or refuses (a 403 says to add the line above) — a folder path is not something to
+guess at, and the wrong one writes recordings where nothing looks for them. A page that would rather draw an
+`emptyState()` than fail: `await recordingsDir().catch(() => null)`.
+
+Before v0.24.0 `DIMOS_APP` carried a `recordingsDir` as well. Two answers to one question is how they drifted apart (a
+recording made from Desktop landed in the dimos checkout while the Recordings app looked somewhere else), so the field
+is gone and this is its replacement.
+
 ## Optional: dim-app's own server
 
 If your app's backend is a Deno module, dim-app can be the whole server: [serve.js](source/serve.js) serves the
@@ -109,7 +142,10 @@ passes no flags or other variables.
 - `dimosDir` — the dimos checkout Desktop uses; `dimosPython` (also `python`) — its venv's python
 - `zenohGatewayUrl` — Desktop's [zenoh-gateway](https://github.com/jeff-hykin/zenoh-gateway) ; `zenohConnect` — the zenoh
   endpoint dimos modules are on
-- `desktopUrl` — Desktop's HTTP base URL; `recordingsDir` — the shared recordings folder
+- `desktopUrl` — Desktop's HTTP base URL
+
+Where recordings are kept is **not** in it (it was, before v0.24.0): ask the dimos gateway, `recordingsDir()` from
+[recordings.js](source/recordings.js) — [Where recordings are kept](#where-recordings-are-kept-ask-the-dimos-gateway).
 
 Both halves carry a `VERSION`; the frontend sends it on connect so the backend can warn when they differ.
 `sendBytes(kind, bytes, meta)` on either side sends bytes in a binary frame (no base64); the other side's handlers get

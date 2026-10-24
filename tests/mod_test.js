@@ -7,7 +7,17 @@ import { getZenoh } from "../source/zenoh.js"
 Deno.test("mod.js: loads in Deno and re-exports the source files' API", () => {
     assertEquals(mod.DimApp, DimApp)
     assertEquals(mod.getZenoh, getZenoh)
-    for (const name of ["DimAppBackend", "DimAppFrontend", "initTheme", "notify", "runShell", "openApp", "appEvents"]) {
+    const api = [
+        "DimAppBackend",
+        "DimAppFrontend",
+        "initTheme",
+        "notify",
+        "recordingsDir",
+        "runShell",
+        "openApp",
+        "appEvents",
+    ]
+    for (const name of api) {
         assertEquals(typeof mod[name], "function", name)
     }
 })

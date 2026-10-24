@@ -42,7 +42,8 @@ export function registry() {
 
 /**
  * What Desktop passed the app's server: the DIMOS_APP JSON (`{ name, socket, url, path, dataDir, desktopUrl,
- * zenohGatewayUrl, zenohConnect, dimosDir, dimosPython, recordingsDir, ... }`), plus `python` (dimosPython's other name).
+ * zenohGatewayUrl, zenohConnect, dimosDir, dimosPython, ... }`), plus `python` (dimosPython's other name). Where
+ * recordings are kept isn't in it: ask the dimos gateway, `recordingsDir()` from recordings.js.
  */
 export function dimContext() {
     const reg = registry()

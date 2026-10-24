@@ -8,6 +8,8 @@ uses:
     "@dimos-gateway":
         # dim_app.js: DimApp's message codec (msgDecodeEndpoint, e.g. ../../gateways/dimos/msgs.js)
         - GET /msgs.js
+        # recordings.js: recordingsDir(), the folder recordings are kept in (the only thing that knows)
+        - GET /history/recordings
     "@desktop-gateway":
         # notify.js: notifications, with the app's icon as the default
         - POST /ui/notifications

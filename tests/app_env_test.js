@@ -32,6 +32,8 @@ Deno.test("DIMOS_APP is read as is; a field it lacks is null", () => {
     assertEquals(read.zenohGatewayUrl, "http://127.0.0.1:7341/zenoh-gateway")
     assertEquals(read.later, "kept")
     assertEquals(read.zenohConnect, null)
+    // not a field any more: where recordings are kept comes from the dimos gateway (recordings.js's recordingsDir)
+    assertEquals(read.recordingsDir, undefined)
 })
 
 Deno.test("outside Desktop: every field null", () => {
