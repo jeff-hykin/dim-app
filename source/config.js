@@ -11,14 +11,23 @@
 // Nothing here is a blocking read: the answer is asked for once per endpoint and kept, so reading it on every use is
 // free.
 //
-// Staying fresh is the gateway's half: it watches the file and publishes `{"type": "config"}` on
-// `<ns>/dimos/events/config` — a bust signal with no values in it, so a listener's cache and the event can never say
-// different things. Both halves of that are here, because apps want different ones:
+// Staying fresh is the gateway's half: it watches the file and publishes `{"type": "config", "setting": "<setting>"}`
+// on `<ns>/dimos/events/config/<setting>` when the answer it would give for that setting moves — one topic per
+// setting, so an app wakes for the one it reads and not for the rest of the file, and a bust signal with no value in
+// it, so a listener's cache and the event can never say different things.
+//
+// Both halves are here, because apps want different ones:
 //
 //   - `sharedConfig()` — an invalidated cache. A `config` event marks it stale; the next read asks again. An app that
 //     reads the config where it needs it (and doesn't draw it) wants only this, and never has to re-ask.
 //   - `watchSharedConfig(callback)` — snapshot + live, the rule for everything in Desktop: the callback is called with
 //     the config now, and again after every change. An app that *shows* a setting wants this instead of polling.
+//
+// When the re-ask happens is the one option, not two functions: `watchSharedConfig(cb)` is **eager** (a change is
+// re-asked at once and the callback gets the new config), and `watchSharedConfig(cb, { eager: false })` is **lazy**
+// (the change only marks the kept answer stale, the callback gets `null`, and the round trip is paid by the next
+// `sharedConfig()` — which an app that has stopped caring never makes). `{ settings: ["recordingsDir"] }` narrows the
+// subscription to the settings the app actually reads.
 //
 // `watchSharedConfig()` with no callback is the same subscription and nothing else: it keeps the cache honest for the
 // `sharedConfig()` calls elsewhere in the app. **A cache nobody watches is never invalidated** — with no watcher
@@ -26,8 +35,7 @@
 // is the event.
 //
 // The live half needs the page's zenoh-gateway connection, so it is opt-in by that one call: there is no top-level
-// `import` of zenoh.js here, and `watchSharedConfig` loads it lazily. `sharedConfig()` on its own is the same one-file
-// add as recordings.js — copy config.js and nothing else and it works. Where there is no zenoh-gateway at all (a Deno
+// `import` of zenoh.js here — gateway_base.js loads it lazily. Where there is no zenoh-gateway at all (a Deno
 // backend), subscribing fails, `onError` says so, and the cache is left as a plain cache; a backend that has to be
 // sure asks with `{ fresh: true }`.
 //
@@ -51,10 +59,11 @@
 //
 // A Deno backend has no page URL, so it passes Desktop's: `sharedConfig({ origin: dimContext().desktopUrl })`.
 
+import { CONFIG_EVENT, desktopBase, watchConfig } from "./gateway_base.js"
+
 const PATH = "gateways/dimos/config"
 
-/** The gateway's event type for "the shared config changed" (`<ns>/dimos/events/config`); it carries no values. */
-export const CONFIG_EVENT = "config"
+export { CONFIG_EVENT }
 
 /**
  * @typedef {{ path: string, recordingsDir: string }} SharedConfig the gateway's answer, as it sends it
@@ -63,26 +72,6 @@ export const CONFIG_EVENT = "config"
 
 /** @type {Map<string, Entry>} the endpoint's URL → the last answer and whether an event has busted it */
 const known = new Map()
-
-/**
- * Desktop's base URL, ending in `/`: `origin`, or this page's own (`<origin><prefix>/apps/<name>/` → `<origin><prefix>/`,
- * so an app under a path prefix asks the right place). Its own copy of recordings.js's, not an import of it, so that
- * this file is a one-file add on its own.
- */
-function desktopBase(origin) {
-    if (origin) {
-        return origin.endsWith("/") ? origin : `${origin}/`
-    }
-    const href = globalThis.location?.href
-    if (!href) {
-        throw new Error(
-            "sharedConfig: no page URL to ask from; pass { origin: dimContext().desktopUrl } (a backend's DIMOS_APP has it)",
-        )
-    }
-    const url = new URL(href)
-    const match = url.pathname.match(/^(.*?)\/apps\/[^/]+\//)
-    return `${url.origin}${match ? match[1] : ""}/`
-}
 
 async function ask(url, fetchImpl) {
     const response = await fetchImpl(url.href)
@@ -150,7 +139,7 @@ function bust(entry) {
  * @returns {Promise<SharedConfig>}
  */
 export async function sharedConfig(options = {}) {
-    const url = new URL(PATH, desktopBase(options.origin))
+    const url = new URL(PATH, desktopBase(options.origin, "sharedConfig"))
     const entry = entryFor(url.href)
     const fetchImpl = options.fetch ?? ((...args) => globalThis.fetch(...args))
     if (options.fresh) {
@@ -175,14 +164,21 @@ export async function sharedConfig(options = {}) {
  * Subscribes to the gateway's `config` event so the config stays current: with `callback`, it's called with the config
  * now and again after every change (snapshot + live); with none, the subscription only busts `sharedConfig()`'s cache.
  * Never throws — a failed ask or subscribe goes to `onError` (default: console.debug) and the last answer stands.
- * @param {((config: SharedConfig) => void) | null} [callback]
- * @param {{ origin?: string, fetch?: typeof fetch, zenoh?: any, onError?: (error: unknown) => void }} [options]
- *   `zenoh`: an AppZenoh to subscribe on (default: the page's one connection, loaded lazily from zenoh.js)
+ *
+ * `eager` is when the re-ask happens, and the only difference between the two shapes an app might want. Eager (the
+ * default) re-asks the moment the gateway says a setting moved, so the callback gets the new config and a
+ * `sharedConfig()` elsewhere is already free. Lazy marks the kept answer stale and calls back with `null` instead: the
+ * round trip is paid by the next `sharedConfig()`, so an app that has navigated away from the setting never pays it.
+ * @param {((config: SharedConfig | null) => void) | null} [callback] eager: the config; lazy: `null`, meaning "it
+ *   changed, read it when you need it"
+ * @param {{ origin?: string, fetch?: typeof fetch, zenoh?: any, eager?: boolean, settings?: string[],
+ *   onError?: (error: unknown) => void }} [options] `zenoh`: an AppZenoh to subscribe on (default: the page's one
+ *   connection, loaded lazily from zenoh.js); `settings`: the keys of the answer to listen for (default: all of them)
  * @returns {() => void} stop watching
  */
 export function watchSharedConfig(callback = null, options = {}) {
+    const eager = options.eager ?? true
     let stopped = false
-    let off = null
     const report = (error) => {
         if (stopped) {
             return
@@ -197,52 +193,41 @@ export function watchSharedConfig(callback = null, options = {}) {
             console.error("[dim-app] watchSharedConfig onError threw:", thrown)
         }
     }
-    const deliver = (promise) =>
-        promise.then((config) => {
-            if (stopped || !callback) {
-                return
-            }
-            try {
-                callback(config)
-            } catch (error) {
-                console.error("[dim-app] watchSharedConfig callback threw:", error)
-            }
-        }, report)
+    const hand = (config) => {
+        if (stopped || !callback) {
+            return
+        }
+        try {
+            callback(config)
+        } catch (error) {
+            console.error("[dim-app] watchSharedConfig callback threw:", error)
+        }
+    }
+    const deliver = (promise) => promise.then(hand, report)
     let href = null
     try {
-        href = new URL(PATH, desktopBase(options.origin)).href
+        href = new URL(PATH, desktopBase(options.origin, "sharedConfig")).href
     } catch (error) {
         report(error) // no page URL and no origin: nothing to watch, and sharedConfig() says the same
         return () => {}
     }
     const changed = () => {
         bust(entryFor(href))
-        if (callback) {
-            deliver(sharedConfig({ ...options, fresh: true })) // the event has no values in it: the endpoint is the answer
-        }
-    }
-    ;(async () => {
-        const zenoh = options.zenoh ?? (await import("./zenoh.js")).getZenoh()
-        if (stopped) {
+        if (!callback) {
             return
         }
-        const offEvent = zenoh.subscribeDimos(CONFIG_EVENT, changed)
-        const offReconnect = zenoh.onReconnect(changed) // events published while the link was down are gone
-        off = () => {
-            offEvent()
-            offReconnect()
+        if (eager) {
+            deliver(sharedConfig({ ...options, fresh: true })) // the event has no value in it: the endpoint is the answer
+        } else {
+            hand(null) // it changed; sharedConfig() is the value, asked when the app next wants it
         }
-        if (stopped) {
-            off()
-            off = null
-        }
-    })().catch(report)
-    if (callback) {
+    }
+    const stopWatching = watchConfig(options.settings ?? null, changed, options)
+    if (callback && eager) {
         deliver(sharedConfig(options)) // the snapshot, from the kept answer when there is one
     }
     return () => {
         stopped = true
-        off?.()
-        off = null
+        stopWatching()
     }
 }

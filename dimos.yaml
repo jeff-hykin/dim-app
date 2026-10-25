@@ -8,10 +8,11 @@ uses:
     "@dimos-gateway":
         # dim_app.js: DimApp's message codec (msgDecodeEndpoint, e.g. ../../gateways/dimos/msgs.js)
         - GET /msgs.js
-        # recordings.js: recordingsDir(), the folder recordings are kept in (the only thing that knows)
+        # recordings.js: recordingsDir(), the folder recordings are kept in (the only thing that knows);
+        # watchRecordingsDir() re-asks it on that setting's config event
         - GET /history/recordings
         # config.js: sharedConfig(), the shared config.yaml's settings as the gateway resolves them; its `config`
-        # event (<ns>/dimos/events/config, watchSharedConfig) says to read it again
+        # event (<ns>/dimos/events/config/<setting>, one topic per setting; watchSharedConfig) says to read it again
         - GET /config
     "@desktop-gateway":
         # notify.js: notifications, with the app's icon as the default
@@ -31,5 +32,6 @@ uses:
         - GET /info/apps
         # desktop_events.js (backend, no zenoh-gateway): Desktop's event stream
         - GET /ui/events
-    # zenoh.js (getZenoh, DimApp, desktop_events.js, config.js's watchSharedConfig): Subscription.update needs >=0.5.1
+    # zenoh.js (getZenoh, DimApp, desktop_events.js, gateway_base.js's watchConfig — so watchSharedConfig and
+    # watchRecordingsDir): Subscription.update needs >=0.5.1
     "@zenoh-gateway": ">=0.5.1"

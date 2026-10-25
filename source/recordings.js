@@ -20,31 +20,28 @@
 // refuses — a folder path is not something to guess at, and a wrong one writes recordings where nothing looks for
 // them. A page that would rather draw an empty state than fail: `await recordingsDir().catch(() => null)`.
 //
+// The folder can move while an app runs (Desktop writes `recordings.dir` into the shared config.yaml), so the keeping
+// has a listening half, and it is built in rather than something each app wires itself:
+//
+//     const stop = watchRecordingsDir((dir) => { where = dir })  // now, and again every time it moves
+//
+// It subscribes to the one topic the gateway busts for this setting (`<ns>/dimos/events/config/recordingsDir`) — not
+// the whole config — and re-asks this same endpoint, so there is still one answer to where recordings are. `eager` is
+// the choice of when: eager (the default) re-asks at once and hands the callback the new folder, lazy calls back with
+// `null` and leaves the round trip to the next `recordingsDir()`. Watching needs zenoh, loaded lazily by
+// gateway_base.js, so an app that only asks never pulls in the zenoh-gateway client.
+//
 // A Deno backend has no page URL, so it passes Desktop's: `recordingsDir({ origin: dimContext().desktopUrl })`.
+
+import { desktopBase, watchConfig } from "./gateway_base.js"
 
 const PATH = "gateways/dimos/history/recordings"
 
+/** The key of `GET /gateways/dimos/config` this folder is, and so the config event that busts it. */
+const SETTING = "recordingsDir"
+
 /** @type {Map<string, Promise<string>>} the endpoint's URL → the one ask */
 const asked = new Map()
-
-/**
- * Desktop's base URL, ending in `/`: `origin`, or this page's own (`<origin><prefix>/apps/<name>/` → `<origin><prefix>/`,
- * so an app under a path prefix asks the right place).
- */
-function desktopBase(origin) {
-    if (origin) {
-        return origin.endsWith("/") ? origin : `${origin}/`
-    }
-    const href = globalThis.location?.href
-    if (!href) {
-        throw new Error(
-            "recordingsDir: no page URL to ask from; pass { origin: dimContext().desktopUrl } (a backend's DIMOS_APP has it)",
-        )
-    }
-    const url = new URL(href)
-    const match = url.pathname.match(/^(.*?)\/apps\/[^/]+\//)
-    return `${url.origin}${match ? match[1] : ""}/`
-}
 
 async function ask(url, fetchImpl) {
     const response = await fetchImpl(url.href)
@@ -71,7 +68,7 @@ async function ask(url, fetchImpl) {
  * @returns {Promise<string>}
  */
 export async function recordingsDir(options = {}) {
-    const url = new URL(PATH, desktopBase(options.origin))
+    const url = new URL(PATH, desktopBase(options.origin, "recordingsDir"))
     if (options.fresh) {
         asked.delete(url.href)
     }
@@ -82,4 +79,69 @@ export async function recordingsDir(options = {}) {
         asked.set(url.href, pending)
     }
     return await pending
+}
+
+/**
+ * Subscribes to the gateway's config event for the recordings folder, so a long-lived app keeps a current answer
+ * without asking for it again: `callback` is called with the folder now and again every time it moves. Never throws —
+ * a failed ask or subscribe goes to `onError` (default: console.debug) and the last answer stands.
+ * @param {((dir: string | null) => void) | null} [callback] eager: the folder; lazy: `null`, meaning "it moved, ask
+ *   when you need it"
+ * @param {{ origin?: string, fetch?: typeof fetch, zenoh?: any, eager?: boolean,
+ *   onError?: (error: unknown) => void }} [options]
+ * @returns {() => void} stop watching
+ */
+export function watchRecordingsDir(callback = null, options = {}) {
+    const eager = options.eager ?? true
+    let stopped = false
+    const report = (error) => {
+        if (stopped) {
+            return
+        }
+        if (!options.onError) {
+            console.debug("[dim-app] watchRecordingsDir:", error)
+            return
+        }
+        try {
+            options.onError(error)
+        } catch (thrown) {
+            console.error("[dim-app] watchRecordingsDir onError threw:", thrown)
+        }
+    }
+    const hand = (dir) => {
+        if (stopped || !callback) {
+            return
+        }
+        try {
+            callback(dir)
+        } catch (error) {
+            console.error("[dim-app] watchRecordingsDir callback threw:", error)
+        }
+    }
+    let href = null
+    try {
+        href = new URL(PATH, desktopBase(options.origin, "recordingsDir")).href
+    } catch (error) {
+        report(error) // no page URL and no origin: nothing to watch, and recordingsDir() says the same
+        return () => {}
+    }
+    const changed = () => {
+        asked.delete(href) // the event carries no value: this endpoint is the answer
+        if (!callback) {
+            return
+        }
+        if (eager) {
+            recordingsDir(options).then(hand, report)
+        } else {
+            hand(null)
+        }
+    }
+    const stopWatching = watchConfig([SETTING], changed, options)
+    if (callback && eager) {
+        recordingsDir(options).then(hand, report)
+    }
+    return () => {
+        stopped = true
+        stopWatching()
+    }
 }

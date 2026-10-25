@@ -20,7 +20,8 @@ Every app has a `dimos.yaml` (Desktop's docs/apps.md has the full spec). `uses:`
 itself (each gateway's paths relative to it, e.g. `"@desktop-gateway"` under `/gateways/desktop/`), and
 Desktop refuses undeclared calls (403 at runtime). dim-app's own [dimos.yaml](dimos.yaml) lists what each helper
 calls, so copy the lines for the helpers you use: `GET /msgs.js` for `DimApp`, `GET /history/recordings` for
-`recordingsDir()`, `GET /config` (+ `"@zenoh-gateway"` to watch it) for `sharedConfig()`,
+`recordingsDir()` (+ `"@zenoh-gateway"` for `watchRecordingsDir()`), `GET /config` (+ `"@zenoh-gateway"` to watch it)
+for `sharedConfig()`,
 `POST /ui/notifications` + `GET /info/apps/{pkg}/icon` for `notify()`, and so on.
 `provides:` is an OpenAPI 3.1 document of the app's own API: its `x-when`s and descriptions are what Desktop's agent and
 the agents' skill files read, and `x-private` lists what only the app's own pages call.
@@ -80,19 +81,29 @@ every launch is handed that same folder (`--record-dir`), so what it says and wh
 [recordings.js](source/recordings.js):
 
 ```js
-import { recordingsDir } from "./dim-app/mod.js"
+import { recordingsDir, watchRecordingsDir } from "./dim-app/mod.js"
 
 const dir = await recordingsDir() // "/home/you/.dimos/recordings"
 const same = await recordingsDir({ origin: dimContext().desktopUrl }) // from a Deno backend: it has no page URL
+const stop = watchRecordingsDir((dir) => { where = dir }) // the folder now, and again every time it moves
 ```
 
-The app must declare the call under `uses:` in its `dimos.yaml` or Desktop refuses it with a 403:
+The app must declare the call under `uses:` in its `dimos.yaml`, and `"@zenoh-gateway"` as well if it watches, or
+Desktop refuses them with a 403:
 
 ```yaml
 uses:
     "@dimos-gateway":
         - GET /history/recordings
+    "@zenoh-gateway": ">=0.5.1" # watchRecordingsDir only
 ```
+
+The folder can move while an app runs, so the listening half is built in rather than something each app wires itself:
+`watchRecordingsDir` subscribes to the one topic the gateway busts for this setting
+(`<ns>/dimos/events/config/recordingsDir`) and re-asks this same endpoint, so there is still one answer to where
+recordings are. `eager` is the choice of *when*: eager (the default) re-asks at once and hands the callback the new
+folder; `{ eager: false }` calls back with `null` and leaves the round trip to the next `recordingsDir()`, which an app
+that has navigated away from the folder never makes.
 
 It asks once per Desktop and keeps the answer for the life of the page (or the process), so calling it wherever you need
 the folder is free; a failed ask isn't kept, and `{ fresh: true }` asks again. Unlike the other helpers it **throws**
@@ -114,8 +125,10 @@ The machine's dimos settings live in `$DIMOS_HOME/config.yaml` (`~/.dimos/config
 one thing that reads it: `GET /gateways/dimos/config` answers `{"path": "<the file>", "recordingsDir": "<dir>"}`,
 resolved exactly the way every dimos process resolves it (`dimos.utils.shared_config`), so a `dimos run` in a terminal
 and an app agree. Nothing reads the file, and nothing does a blocking HTTP call per read either: the gateway watches the
-file and publishes `{"type": "config"}` on `<ns>/dimos/events/config` — a **bust signal with no values in it**, so a
-listener's cache and the event can never say different things. [config.js](source/config.js) is both halves:
+file and publishes `{"type": "config", "setting": "<setting>"}` on `<ns>/dimos/events/config/<setting>` — **one topic
+per setting**, so an app wakes for the one it reads and not for the rest of the file, and a **bust signal with no value
+in it**, so a listener's cache and the event can never say different things. [config.js](source/config.js) is both
+halves:
 
 ```js
 import { sharedConfig, watchSharedConfig } from "./dim-app/mod.js"
@@ -123,7 +136,14 @@ import { sharedConfig, watchSharedConfig } from "./dim-app/mod.js"
 const config = await sharedConfig() // { path: "/home/you/.dimos/config.yaml", recordingsDir: "…" } — cached
 const stop = watchSharedConfig((config) => render(config)) // the config now, and again on every change
 watchSharedConfig() // no callback: the same subscription, keeping sharedConfig()'s cache honest for the whole app
+watchSharedConfig((config) => render(config), { settings: ["recordingsDir"] }) // only that setting's topic
+watchSharedConfig(() => invalidate(), { eager: false }) // tells you it changed; the next sharedConfig() is the value
 ```
+
+**Eager or lazy is one option, not two functions.** Eager (the default) re-asks the moment the gateway says a setting
+moved, so the callback gets the new config and a `sharedConfig()` elsewhere in the app is already free — that is what
+an app *showing* a setting wants. Lazy marks the kept answer stale and calls back with `null` instead: the round trip
+is paid by the next `sharedConfig()`, so an app that has stopped looking at the setting never pays it.
 
 The app must declare the read under `uses:` in its `dimos.yaml`, and `"@zenoh-gateway"` as well if it watches, or
 Desktop refuses the calls with a 403:
@@ -139,11 +159,14 @@ uses:
 answer until `{ fresh: true }` — the only thing that knows the file changed is the event. The watcher also re-asks after
 a reconnect, because events published while the link was down are gone.
 
-The live half is why this is opt-in by that one call: `config.js` has no top-level `import` of
-[zenoh.js](source/zenoh.js) and loads it lazily, so `sharedConfig()` on its own is the same one-file add as
-[recordings.js](source/recordings.js) — copy `config.js` and nothing else and it works. In a Deno backend (no
-zenoh-gateway there) subscribing fails, `onError` says so, and the cache is left a plain cache; a backend that has to be
-sure asks with `{ fresh: true }`.
+The live half is why this is opt-in by that one call: nothing here has a top-level `import` of
+[zenoh.js](source/zenoh.js) — [gateway_base.js](source/gateway_base.js), which both helpers share, loads it lazily, so
+asking never pulls in the zenoh-gateway client. In a Deno backend (no zenoh-gateway there) subscribing fails, `onError`
+says so, and the cache is left a plain cache; a backend that has to be sure asks with `{ fresh: true }`.
+
+`gateway_base.js` holds the two things every config-backed answer needs — where Desktop is, and the per-setting bust
+subscription — in one place rather than copied into each helper. `vendor.js` follows a file's imports, so an app that
+vendors `recordings.js` or `config.js` gets it on the next refresh without naming it.
 
 A `path` is not something to guess at, so with no answer at all `sharedConfig()` **throws** (a 403 says to add the line
 above), the same call as `recordingsDir()` makes for the same kind of answer. Once there is an answer, a failed re-ask

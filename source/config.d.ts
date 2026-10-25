@@ -4,7 +4,10 @@ import type { AppZenoh } from "./zenoh.d.ts"
 /** The shared `$DIMOS_HOME/config.yaml` as the dimos gateway resolves it, exactly as `GET /gateways/dimos/config` sends it. */
 export type SharedConfig = { path: string; recordingsDir: string }
 
-/** The gateway's event type for "the shared config changed" (`<ns>/dimos/events/config`); it carries no values. */
+/**
+ * The gateway's event type for a shared-config change (`<ns>/dimos/events/config/<setting>`, one topic per setting);
+ * it carries the setting's name and no value.
+ */
 export const CONFIG_EVENT: "config"
 
 /**
@@ -19,10 +22,19 @@ export function sharedConfig(
 
 /**
  * Subscribes to the gateway's `config` event so the config stays current. With `callback`: called with the config now
- * and after every change. With none: the subscription only busts `sharedConfig()`'s cache. Never throws. Needs
- * `GET /config` under `"@dimos-gateway"` **and** `"@zenoh-gateway"` in the app's dimos.yaml `uses:`.
+ * and after every change. With none: the subscription only busts `sharedConfig()`'s cache. `eager: false` calls back
+ * with `null` instead of the config and leaves the re-ask to the next `sharedConfig()`; `settings` narrows the
+ * subscription to the keys the app reads. Never throws. Needs `GET /config` under `"@dimos-gateway"` **and**
+ * `"@zenoh-gateway"` in the app's dimos.yaml `uses:`.
  */
 export function watchSharedConfig(
-    callback?: ((config: SharedConfig) => void) | null,
-    options?: { origin?: string; fetch?: typeof fetch; zenoh?: AppZenoh; onError?: (error: unknown) => void },
+    callback?: ((config: SharedConfig | null) => void) | null,
+    options?: {
+        origin?: string
+        fetch?: typeof fetch
+        zenoh?: AppZenoh
+        eager?: boolean
+        settings?: string[]
+        onError?: (error: unknown) => void
+    },
 ): () => void

@@ -20,9 +20,9 @@ function fakeZenoh() {
         },
         subscribed,
         reconnects,
-        sendConfigEvent() {
+        sendConfigEvent(setting = "recordingsDir") {
             for (const one of [...subscribed]) {
-                one.callback({ type: "config" })
+                one.callback({ type: "config", setting })
             }
         },
         reconnect() {
@@ -125,7 +125,7 @@ Deno.test("a watcher with no callback subscribes to the config event and only bu
     assertEquals((await sharedConfig({ ...options, fresh: true })).path, "/c/1")
     const stop = watchSharedConfig(null, options)
     await until(() => zenoh.subscribed.length === 1)
-    assertEquals(zenoh.subscribed[0].type, CONFIG_EVENT)
+    assertEquals(zenoh.subscribed[0].type, `${CONFIG_EVENT}/**`) // every setting, each on its own topic
     assertEquals(n, 1) // no callback: nothing was re-asked for
     zenoh.sendConfigEvent()
     assertEquals(n, 1) // and nothing is asked until someone reads
@@ -242,5 +242,36 @@ Deno.test("a callback that throws doesn't take the watcher down", async () => {
     zenoh.sendConfigEvent()
     await until(() => calls === 2)
     assertEquals(zenoh.subscribed.length, 1) // still subscribed
+    stop()
+})
+
+Deno.test("settings: narrows the subscription to the topics of the settings the app reads", async () => {
+    const zenoh = fakeZenoh()
+    const stop = watchSharedConfig(null, {
+        origin: "http://127.0.0.1:7111",
+        fetch: () => answer(CONFIG),
+        zenoh,
+        settings: ["recordingsDir"],
+    })
+    await until(() => zenoh.subscribed.length === 1)
+    assertEquals(zenoh.subscribed.map((one) => one.type), ["config/recordingsDir"])
+    stop()
+    assertEquals(zenoh.subscribed.length, 0)
+})
+
+Deno.test("eager: false calls back with null and leaves the re-ask to the next sharedConfig()", async () => {
+    let n = 0
+    const fetchImpl = () => answer({ path: `/c/${++n}`, recordingsDir: "/r" })
+    const zenoh = fakeZenoh()
+    const seen = []
+    const options = { origin: "http://127.0.0.1:7112", fetch: fetchImpl, zenoh, eager: false }
+    const stop = watchSharedConfig((config) => seen.push(config), options)
+    await until(() => zenoh.subscribed.length === 1)
+    assertEquals([seen, n], [[], 0]) // lazy: no snapshot ask either
+    zenoh.sendConfigEvent()
+    await until(() => seen.length === 1)
+    assertEquals([seen, n], [[null], 0]) // "it changed"; the value is the next read's
+    assertEquals((await sharedConfig(options)).path, "/c/1")
+    assertEquals(n, 1)
     stop()
 })
